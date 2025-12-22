@@ -331,5 +331,14 @@ func extractIdentity(ctx context.Context) (*plugin.Identity, error) {
 
 	// Use the subject of the client certificate as identity
 	subject := tlsInfo.State.VerifiedChains[0][0].Subject
-	return &plugin.Identity{CommonName: subject.CommonName}, nil
+	return &plugin.Identity{
+		UserID: subject.CommonName,
+	}, nil
+}
+
+func resultString(err error) string {
+	if err != nil {
+		return "error"
+	}
+	return "success"
 }

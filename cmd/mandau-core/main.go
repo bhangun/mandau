@@ -1,17 +1,13 @@
 package main
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
+	"github.com/bhangun/mandau/pkg/core"
 )
+
 
 func main() {
 	certPath := flag.String("cert", "certs/core.crt", "Certificate path")
@@ -22,39 +18,22 @@ func main() {
 
 	fmt.Printf("Starting Mandau Core on %s...\n", *listenAddr)
 
-	// Load CA certificate
-	caCert, err := ioutil.ReadFile(*caPath)
+	// Create and configure the Core service
+	coreConfig := &core.CoreConfig{
+		ListenAddr: *listenAddr,
+		CertPath:   *certPath,
+		KeyPath:    *keyPath,
+		CAPath:     *caPath,
+		PluginDir:  "/usr/lib/mandau/plugins", // Default plugin directory
+	}
+
+	mandauCore, err := core.NewCore(coreConfig)
 	if err != nil {
-		log.Fatalf("failed to read CA cert: %v", err)
-	}
-	caCertPool := x509.NewCertPool()
-	if !caCertPool.AppendCertsFromPEM(caCert) {
-		log.Fatalf("failed to parse CA cert")
+		log.Fatalf("failed to create core: %v", err)
 	}
 
-	// Load server certificate and key
-	serverCert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
-	if err != nil {
-		log.Fatalf("failed to load server cert: %v", err)
-	}
-
-	// Create TLS credentials
-	creds := credentials.NewTLS(&tls.Config{
-		Certificates: []tls.Certificate{serverCert},
-		ClientCAs:    caCertPool,
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-	})
-
-	s := grpc.NewServer(grpc.Creds(creds))
-	// TODO: Register services
-
-	lis, err := net.Listen("tcp", *listenAddr)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-
-	fmt.Printf("Mandau Core listening on %s with TLS\n", *listenAddr)
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+	// Start the Core service (this handles gRPC server setup internally)
+	if err := mandauCore.Serve(); err != nil {
+		log.Fatalf("failed to serve core: %v", err)
 	}
 }
