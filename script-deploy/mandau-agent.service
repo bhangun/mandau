@@ -1,0 +1,74 @@
+
+# File: /etc/systemd/system/mandau-agent.service
+[Unit]
+Description=Mandau Infrastructure Agent
+Documentation=https://mandau.io/docs
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=mandau
+Group=docker
+ExecStart=/usr/local/bin/mandau-agent \
+  --config /etc/mandau/config/agent.yaml \
+  --cert /etc/mandau/certs/agent.crt \
+  --key /etc/mandau/certs/agent.key \
+  --ca /etc/mandau/certs/ca.crt
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mandau /var/log/mandau
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_DAC_OVERRIDE
+
+# Restart policy
+Restart=always
+RestartSec=10s
+StartLimitInterval=200
+StartLimitBurst=3
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
+
+---
+# File: /etc/systemd/system/mandau-core.service
+[Unit]
+Description=Mandau Core Control Plane
+Documentation=https://mandau.io/docs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mandau
+Group=mandau
+WorkingDirectory=/var/lib/mandau
+ExecStart=/usr/local/bin/mandau-core \
+  --config /etc/mandau/core/config.yaml \
+  --cert /etc/mandau/certs/core.crt \
+  --key /etc/mandau/certs/core.key \
+  --ca /etc/mandau/certs/ca.crt
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mandau /var/log/mandau
+
+# Restart policy
+Restart=always
+RestartSec=10s
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

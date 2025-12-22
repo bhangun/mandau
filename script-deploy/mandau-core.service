@@ -1,0 +1,33 @@
+# File: /etc/systemd/system/mandau-core.service
+[Unit]
+Description=Mandau Infrastructure Core
+Documentation=https://mandau.io/docs
+After=network.target
+
+[Service]
+Type=simple
+User=mandau
+Group=mandau
+ExecStart=/usr/local/bin/mandau-core \
+  --config /etc/mandau/config/core.yaml \
+  --cert /etc/mandau/certs/core.crt \
+  --key /etc/mandau/certs/core.key \
+  --ca /etc/mandau/certs/ca.crt \
+  --port 8443
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mandau /var/log/mandau
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Restart policy
+Restart=always
+RestartSec=10s
+StartLimitInterval=200
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

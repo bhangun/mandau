@@ -1,0 +1,184 @@
+
+## Prerequisites
+
+- Docker 20.10+
+- Go 1.21+ (for building from source)
+- OpenSSL (for certificate generation)
+
+## Installation
+
+### Option 1: Docker Compose (Development)
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/bhangun/mandau/mandau.git
+   cd mandau
+   ```
+
+2. **Generate certificates:**
+   ```bash
+   make certs
+   ```
+
+3. **Start services:**
+   ```bash
+   docker-compose -f docker-compose-dev.yaml up -d
+   ```
+
+   Or run on host (requires Go and Docker):
+   ```bash
+   ./run-dev.sh --host
+   ```
+
+4. **Verify:**
+   ```bash
+   docker-compose ps
+   ```
+
+### Option 2: Host Installation (Production)
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/bhangun/mandau/mandau.git
+   cd mandau
+   ```
+
+2. **Run the production installer:**
+   ```bash
+   sudo ./run-prod.sh
+   ```
+
+   This will:
+   - Build static binaries
+   - Create the `mandau` user and add it to the `docker` group
+   - Install binaries to `/usr/local/bin`
+   - Install systemd services
+   - Start the services
+
+3. **Verify installation:**
+   ```bash
+   sudo systemctl status mandau-core mandau-agent
+   ```
+
+### Option 3: Manual Binary Installation (Production)
+
+1. **Build static binaries:**
+   ```bash
+   make build-static
+   ```
+
+2. **Generate certificates:**
+   ```bash
+   ./scripts/generate-certs.sh ./certs
+   ```
+
+3. **Create mandau user:**
+   ```bash
+   sudo useradd --system --shell /bin/false --home /var/lib/mandau --create-home mandau
+   sudo usermod -aG docker mandau
+   ```
+
+4. **Install binaries and configs:**
+   ```bash
+   sudo make install
+   sudo mkdir -p /etc/mandau/{config,certs}
+   sudo cp certs/* /etc/mandau/certs/
+   # Copy config files as needed
+   ```
+
+5. **Install systemd services:**
+   ```bash
+   sudo cp script-deploy/mandau-*.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable mandau-core mandau-agent
+   sudo systemctl start mandau-core mandau-agent
+   ```
+
+6. **Verify:**
+   ```bash
+   sudo systemctl status mandau-core mandau-agent
+   ```
+
+4. **Start Agent:**
+   ```bash
+   sudo systemctl enable mandau-agent
+   sudo systemctl start mandau-agent
+   ```
+
+5. **Start Core (control plane):**
+   ```bash
+   sudo systemctl enable mandau-core
+   sudo systemctl start mandau-core
+   ```
+
+## Usage
+
+### CLI Configuration
+
+```bash
+export MANDAU_SERVER=localhost:8443
+export MANDAU_CERT=/etc/mandau/certs/client.crt
+export MANDAU_KEY=/etc/mandau/certs/client.key
+```
+
+### List Agents
+
+```bash
+mandau agent list
+```
+
+### Deploy a Stack
+
+```bash
+# Create compose file
+cat > mystack.yaml <<EOF
+version: '3.8'
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+EOF
+
+# Apply to agent
+mandau stack apply agent-001 mystack mystack.yaml
+```
+
+### Stream Logs
+
+```bash
+mandau stack logs agent-001 mystack
+```
+
+### Execute Command
+
+```bash
+mandau container exec agent-001 mystack-web-1 /bin/sh
+```
+
+## Security Best Practices
+
+1. **Never expose Docker socket directly**
+2. **Always use mTLS for communication**
+3. **Rotate certificates regularly**
+4. **Enable audit logging**
+5. **Use RBAC for access control**
+6. **Store secrets in Vault or similar**
+
+## Troubleshooting
+
+Check agent logs:
+```bash
+sudo journalctl -u mandau-agent -f
+```
+
+Check core logs:
+```bash
+sudo journalctl -u mandau-core -f
+```
+
+Verify certificates:
+```bash
+openssl verify -CAfile /etc/mandau/certs/ca.crt \
+  /etc/mandau/certs/agent.crt
+```

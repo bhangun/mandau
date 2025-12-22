@@ -1,0 +1,117 @@
+---
+server:
+  listen_addr: ":8443"
+  tls:
+    cert_path: "/etc/mandau/certs/tls.crt"
+    key_path: "/etc/mandau/certs/tls.key"
+    ca_path: "/etc/mandau/certs/ca.crt"
+    min_version: "TLS1.3"
+
+plugins:
+  enabled:
+    - file-audit
+    - rbac-auth
+    - vault-secrets
+  
+  file-audit:
+    log_dir: "/var/log/mandau"
+    rotate_size: "100MB"
+    retention_days: 90
+  
+  rbac-auth:
+    roles_file: "/etc/mandau/config/roles.yaml"
+  
+  vault-secrets:
+    address: "http://vault:8200"
+    path: "secret/data/mandau"
+    auth_method: "kubernetes"
+
+agent_management:
+  heartbeat_interval: "30s"
+  offline_timeout: "90s"
+  auto_deregister: false
+
+---
+# File: config/core/roles.yaml
+roles:
+  - name: admin
+    permissions:
+      - resource: "*"
+        actions: ["*"]
+  
+  - name: operator
+    permissions:
+      - resource: "stack:*"
+        actions: ["read", "write", "delete"]
+      - resource: "container:*"
+        actions: ["read", "exec", "logs"]
+      - resource: "image:*"
+        actions: ["read", "pull"]
+      - resource: "file:*"
+        actions: ["read", "write"]
+  
+  - name: developer
+    permissions:
+      - resource: "stack:dev-*"
+        actions: ["read", "write"]
+      - resource: "container:dev-*"
+        actions: ["read", "logs", "exec"]
+      - resource: "file:dev-*"
+        actions: ["read", "write"]
+  
+  - name: viewer
+    permissions:
+      - resource: "*"
+        actions: ["read", "logs"]
+
+users:
+  - id: "admin@example.com"
+    name: "Administrator"
+    roles: ["admin"]
+  
+  - id: "ops@example.com"
+    name: "Operations Team"
+    roles: ["operator"]
+  
+  - id: "dev@example.com"
+    name: "Development Team"
+    roles: ["developer"]
+
+---
+# File: config/agent/config.yaml
+agent:
+  id: "${MANDAU_AGENT_ID}"
+  hostname: "${HOSTNAME}"
+  labels:
+    environment: "production"
+    datacenter: "dc1"
+    zone: "us-east-1a"
+
+server:
+  listen_addr: ":8443"
+  tls:
+    cert_path: "/etc/mandau/certs/tls.crt"
+    key_path: "/etc/mandau/certs/tls.key"
+    ca_path: "/etc/mandau/certs/ca.crt"
+
+docker:
+  socket: "/var/run/docker.sock"
+  api_version: "1.41"
+
+stacks:
+  root_dir: "/var/lib/mandau/stacks"
+  max_concurrent_operations: 5
+
+plugins:
+  enabled:
+    - file-audit
+    - rbac-auth
+  
+  file-audit:
+    log_dir: "/var/log/mandau"
+    rotate_size: "50MB"
+
+security:
+  exec_timeout: "1h"
+  log_retention: "30d"
+  terminal_recording: true

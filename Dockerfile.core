@@ -1,0 +1,41 @@
+# File: Dockerfile.core
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /build
+
+# Install dependencies
+RUN apk add --no-cache git make
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source
+COPY . .
+
+# Build
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags="-w -s" \
+    -o mandau-core \
+    ./cmd/mandau-core
+
+# Final image
+FROM alpine:3.18
+
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY --from=builder /build/mandau-core /usr/local/bin/
+
+# Create mandau user
+RUN addgroup -g 1000 mandau && \
+    adduser -D -u 1000 -G mandau mandau
+
+# Create directories
+RUN mkdir -p /var/lib/mandau /var/log/mandau /etc/mandau && \
+    chown -R mandau:mandau /var/lib/mandau /var/log/mandau
+
+USER mandau
+
+EXPOSE 8443
+
+ENTRYPOINT ["/usr/local/bin/mandau-core"]

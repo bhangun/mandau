@@ -1,0 +1,370 @@
+syntax = "proto3";
+package mandau.agent.v1;
+option go_package = "github.com/bhangun/mandau/api/v1;agentv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+// Core Service - Central control plane
+service CoreService {
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+  // Additional core services can be added here
+}
+
+message ListAgentsRequest {}
+
+message ListAgentsResponse {
+  repeated Agent agents = 1;
+}
+
+message Agent {
+  string id = 1;
+  string hostname = 2;
+  string status = 3;
+  map<string, string> labels = 4;
+  repeated string capabilities = 5;
+  google.protobuf.Timestamp last_seen = 6;
+}
+
+// Agent Identity & Lifecycle Service
+service AgentService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc GetCapabilities(CapabilitiesRequest) returns (CapabilitiesResponse);
+  rpc GetHealth(HealthRequest) returns (HealthResponse);
+}
+
+message RegisterRequest {
+  string hostname = 1;
+  string version = 2;
+  map<string, string> labels = 3;
+  repeated string capabilities = 4;
+}
+
+message RegisterResponse {
+  string agent_id = 1;
+  bytes certificate = 2;
+  google.protobuf.Duration heartbeat_interval = 3;
+}
+
+// Stack Management Service
+service StackService {
+  rpc ListStacks(ListStacksRequest) returns (ListStacksResponse);
+  rpc GetStack(GetStackRequest) returns (GetStackResponse);
+  rpc ApplyStack(ApplyStackRequest) returns (stream OperationEvent);
+  rpc RemoveStack(RemoveStackRequest) returns (stream OperationEvent);
+  rpc DiffStack(DiffStackRequest) returns (DiffStackResponse);
+  rpc GetStackLogs(GetStackLogsRequest) returns (stream LogEntry);
+}
+
+message Stack {
+  string id = 1;
+  string name = 2;
+  string path = 3;
+  StackState state = 4;
+  repeated Container containers = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  map<string, string> labels = 8;
+}
+
+enum StackState {
+  STACK_STATE_UNKNOWN = 0;
+  STACK_STATE_RUNNING = 1;
+  STACK_STATE_STOPPED = 2;
+  STACK_STATE_ERROR = 3;
+  STACK_STATE_PARTIAL = 4;
+}
+
+message ApplyStackRequest {
+  string agent_id = 1;
+  string stack_name = 2;
+  string compose_content = 3;
+  map<string, string> env_vars = 4;
+  bool force_recreate = 5;
+  repeated string services = 6;
+  bool pull_images = 7;
+}
+
+message DiffStackRequest {
+  string stack_name = 1;
+  string new_compose_content = 2;
+}
+
+message DiffStackResponse {
+  repeated ServiceDiff services = 1;
+  bool has_changes = 2;
+}
+
+message ServiceDiff {
+  string name = 1;
+  DiffAction action = 2;
+  repeated string changes = 3;
+}
+
+enum DiffAction {
+  DIFF_ACTION_NONE = 0;
+  DIFF_ACTION_CREATE = 1;
+  DIFF_ACTION_UPDATE = 2;
+  DIFF_ACTION_DELETE = 3;
+}
+
+// Container Management Service
+service ContainerService {
+  rpc ListContainers(ListContainersRequest) returns (ListContainersResponse);
+  rpc InspectContainer(InspectContainerRequest) returns (InspectContainerResponse);
+  rpc StreamLogs(StreamLogsRequest) returns (stream LogEntry);
+  rpc Exec(stream ExecRequest) returns (stream ExecResponse);
+  rpc GetStats(GetStatsRequest) returns (stream ContainerStats);
+  rpc StartContainer(StartContainerRequest) returns (StartContainerResponse);
+  rpc StopContainer(StopContainerRequest) returns (StopContainerResponse);
+  rpc RestartContainer(RestartContainerRequest) returns (RestartContainerResponse);
+}
+
+message Container {
+  string id = 1;
+  string name = 2;
+  string image = 3;
+  string state = 4;
+  string status = 5;
+  google.protobuf.Timestamp created = 6;
+  map<string, string> labels = 7;
+  repeated Port ports = 8;
+}
+
+message Port {
+  uint32 private_port = 1;
+  uint32 public_port = 2;
+  string type = 3;
+  string ip = 4;
+}
+
+message ExecRequest {
+  oneof payload {
+    ExecStart start = 1;
+    bytes stdin = 2;
+    ExecResize resize = 3;
+  }
+}
+
+message ExecStart {
+  string container_id = 1;
+  repeated string cmd = 2;
+  bool tty = 3;
+  map<string, string> env = 4;
+  string working_dir = 5;
+  string user = 6;
+}
+
+message ExecResize {
+  uint32 height = 1;
+  uint32 width = 2;
+}
+
+message ExecResponse {
+  oneof payload {
+    bytes stdout = 1;
+    bytes stderr = 2;
+    int32 exit_code = 3;
+    string error = 4;
+  }
+}
+
+message LogEntry {
+  google.protobuf.Timestamp timestamp = 1;
+  string stream = 2; // stdout or stderr
+  bytes content = 3;
+  string container_id = 4;
+  string service_name = 5;
+}
+
+message ContainerStats {
+  string container_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  CPUStats cpu = 3;
+  MemoryStats memory = 4;
+  NetworkStats network = 5;
+  BlockIOStats block_io = 6;
+}
+
+// Filesystem Service
+service FilesystemService {
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+  rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
+  rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc CreateDirectory(CreateDirectoryRequest) returns (CreateDirectoryResponse);
+}
+
+message ListFilesRequest {
+  string stack_name = 1;
+  string path = 2; // Relative to stack root
+}
+
+message ListFilesResponse {
+  repeated FileInfo files = 1;
+}
+
+message FileInfo {
+  string name = 1;
+  string path = 2;
+  bool is_dir = 3;
+  int64 size = 4;
+  google.protobuf.Timestamp modified = 5;
+  uint32 mode = 6;
+}
+
+message ReadFileRequest {
+  string stack_name = 1;
+  string path = 2;
+}
+
+message ReadFileResponse {
+  bytes content = 1;
+  FileInfo info = 2;
+}
+
+message WriteFileRequest {
+  string stack_name = 1;
+  string path = 2;
+  bytes content = 3;
+  uint32 mode = 4;
+}
+
+// Operations Service
+service OperationsService {
+  rpc GetOperation(GetOperationRequest) returns (Operation);
+  rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse);
+  rpc CancelOperation(CancelOperationRequest) returns (CancelOperationResponse);
+  rpc StreamOperation(StreamOperationRequest) returns (stream OperationEvent);
+}
+
+message Operation {
+  string id = 1;
+  string type = 2;
+  OperationState state = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp completed_at = 5;
+  string error = 6;
+  map<string, string> metadata = 7;
+  int32 progress = 8;
+}
+
+enum OperationState {
+  OPERATION_STATE_PENDING = 0;
+  OPERATION_STATE_RUNNING = 1;
+  OPERATION_STATE_COMPLETED = 2;
+  OPERATION_STATE_FAILED = 3;
+  OPERATION_STATE_CANCELLED = 4;
+}
+
+message OperationEvent {
+  string operation_id = 1;
+  OperationState state = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  string message = 4;
+  int32 progress = 5;
+  string error = 6;
+}
+
+// Missing messages
+message HeartbeatRequest {
+  string agent_id = 1;
+  map<string, string> status = 2;
+}
+
+message HeartbeatResponse {
+  string status = 1;
+  google.protobuf.Duration next_heartbeat = 2;
+}
+
+message CapabilitiesRequest {}
+
+message CapabilitiesResponse {
+  repeated string capabilities = 1;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool healthy = 1;
+  map<string, string> status = 2;
+}
+
+message ListStacksRequest {
+  string agent_id = 1;
+}
+message ListStacksResponse {
+  repeated Stack stacks = 1;
+}
+message GetStackRequest {
+  string stack_id = 1;
+}
+message GetStackResponse {
+  Stack stack = 1;
+}
+message RemoveStackRequest {
+  string stack_id = 1;
+}
+message GetStackLogsRequest {
+  string agent_id = 1;
+  string stack_name = 2;
+  bool follow = 3;
+}
+
+message ListContainersRequest {}
+message ListContainersResponse {
+  repeated Container containers = 1;
+}
+message InspectContainerRequest {
+  string container_id = 1;
+}
+message InspectContainerResponse {
+  Container container = 1;
+}
+message StreamLogsRequest {
+  string container_id = 1;
+}
+message GetStatsRequest {
+  string container_id = 1;
+}
+message StartContainerRequest {
+  string container_id = 1;
+}
+message StartContainerResponse {}
+message StopContainerRequest {
+  string container_id = 1;
+}
+message StopContainerResponse {}
+message RestartContainerRequest {
+  string container_id = 1;
+}
+message RestartContainerResponse {}
+
+message WriteFileResponse {}
+message DeleteFileRequest {
+  string path = 1;
+}
+message DeleteFileResponse {}
+message CreateDirectoryRequest {
+  string path = 1;
+}
+message CreateDirectoryResponse {}
+
+message GetOperationRequest {
+  string operation_id = 1;
+}
+message ListOperationsRequest {}
+message ListOperationsResponse {}
+message CancelOperationRequest {
+  string operation_id = 1;
+}
+message CancelOperationResponse {}
+message StreamOperationRequest {
+  string operation_id = 1;
+}
+
+message CPUStats {}
+message MemoryStats {}
+message NetworkStats {}
+message BlockIOStats {}

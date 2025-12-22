@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # Mandau Core (Control Plane)
+  mandau-core:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./certs:/etc/mandau/certs:ro
+      - ./config/core:/etc/mandau/config:ro
+      - core-data:/var/lib/mandau
+    environment:
+      - MANDAU_LISTEN_ADDR=:8443
+      - MANDAU_CERT_PATH=/etc/mandau/certs/core.crt
+      - MANDAU_KEY_PATH=/etc/mandau/certs/core.key
+      - MANDAU_CA_PATH=/etc/mandau/certs/ca.crt
+    networks:
+      - mandau-network
+    restart: unless-stopped
+
+  # Mandau Agent (on same host for development)
+  mandau-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    ports:
+      - "8444:8443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./certs:/etc/mandau/certs:ro
+      - ./config/agent:/etc/mandau/config:ro
+      - ./stacks:/var/lib/mandau/stacks
+      - agent-data:/var/lib/mandau/data
+    environment:
+      - MANDAU_AGENT_ID=dev-agent-001
+      - MANDAU_LISTEN_ADDR=:8443
+      - MANDAU_CERT_PATH=/etc/mandau/certs/agent.crt
+      - MANDAU_KEY_PATH=/etc/mandau/certs/agent.key
+      - MANDAU_CA_PATH=/etc/mandau/certs/ca.crt
+      - MANDAU_STACK_ROOT=/var/lib/mandau/stacks
+    networks:
+      - mandau-network
+    restart: unless-stopped
+
+volumes:
+  core-data:
+  agent-data:
+
+networks:
+  mandau-network:
+    driver: bridge

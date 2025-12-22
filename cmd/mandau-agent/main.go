@@ -1,0 +1,574 @@
+package main
+
+import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"flag"
+	"fmt"
+	"io/ioutil"
+	"net"
+	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
+	"time"
+
+	"github.com/bhangun/mandau/api/v1"
+	"github.com/bhangun/mandau/pkg/agent/container"
+	"github.com/bhangun/mandau/pkg/agent/filesystem"
+	"github.com/bhangun/mandau/pkg/agent/operation"
+	"github.com/bhangun/mandau/pkg/agent/stack"
+	"github.com/bhangun/mandau/pkg/plugin"
+	"github.com/bhangun/mandau/plugins/auth/rbac"
+	"github.com/moby/moby/client"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+type Agent struct {
+	agentv1.UnimplementedAgentServiceServer
+	agentv1.UnimplementedStackServiceServer
+	agentv1.UnimplementedContainerServiceServer
+	agentv1.UnimplementedFilesystemServiceServer
+	agentv1.UnimplementedOperationsServiceServer
+
+	config       *Config
+	docker       *client.Client
+	plugins      *plugin.Registry
+	opMgr        *operation.Manager
+	stackMgr     *stack.Manager
+	containerMgr *container.Manager
+	fsMgr        *filesystem.Manager
+}
+
+type Config struct {
+	AgentID    string
+	Hostname   string
+	ListenAddr string
+	CertPath   string
+	KeyPath    string
+	CAPath     string
+	StackRoot  string
+	PluginDir  string
+	Labels     map[string]string
+}
+
+func main() {
+	cfg := parseFlags()
+
+	agent, err := NewAgent(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create agent: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- agent.Serve()
+	}()
+
+	select {
+	case err := <-errChan:
+		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+		os.Exit(1)
+	case sig := <-sigChan:
+		fmt.Printf("\nReceived signal %v, shutting down...\n", sig)
+		agent.Shutdown()
+	}
+}
+
+func parseFlags() *Config {
+	cfg := &Config{
+		Labels: make(map[string]string),
+	}
+
+	flag.StringVar(&cfg.AgentID, "id", "", "Agent ID (auto-generated if empty)")
+	flag.StringVar(&cfg.ListenAddr, "listen", ":8444", "Listen address")
+	flag.StringVar(&cfg.CertPath, "cert", "/etc/mandau/agent.crt", "Certificate path")
+	flag.StringVar(&cfg.KeyPath, "key", "/etc/mandau/agent.key", "Key path")
+	flag.StringVar(&cfg.CAPath, "ca", "/etc/mandau/ca.crt", "CA certificate path")
+	flag.StringVar(&cfg.StackRoot, "stack-root", "/var/lib/mandau/stacks", "Stack root directory")
+	flag.StringVar(&cfg.PluginDir, "plugin-dir", "/usr/lib/mandau/plugins", "Plugin directory")
+
+	flag.Parse()
+
+	// Get hostname
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+	cfg.Hostname = hostname
+
+	// Generate agent ID if not provided
+	if cfg.AgentID == "" {
+		cfg.AgentID = fmt.Sprintf("agent-%s", hostname)
+	}
+
+	return cfg
+}
+
+func NewAgent(cfg *Config) (*Agent, error) {
+	// Docker client
+	opts := []client.Opt{
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	}
+
+	// On macOS, if DOCKER_HOST is not set but the default socket doesn't exist,
+	// try the Docker Desktop socket path
+	if runtime.GOOS == "darwin" {
+		dockerHost := os.Getenv("DOCKER_HOST")
+		if dockerHost == "" {
+			// Check if default socket exists
+			if _, err := os.Stat("/var/run/docker.sock"); os.IsNotExist(err) {
+				// Try Docker Desktop socket path
+				defaultDockerDesktopSock := "/Users/" + os.Getenv("USER") + "/.docker/run/docker.sock"
+				if _, err := os.Stat(defaultDockerDesktopSock); err == nil {
+					os.Setenv("DOCKER_HOST", "unix://"+defaultDockerDesktopSock)
+					opts = append(opts, client.WithHost("unix://"+defaultDockerDesktopSock))
+				}
+			}
+		}
+	}
+
+	docker, err := client.NewClientWithOpts(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("docker client: %w", err)
+	}
+
+	// Test docker connection
+	ctx := context.Background()
+	if _, err := docker.Ping(ctx, client.PingOptions{}); err != nil {
+		return nil, fmt.Errorf("docker ping: %w", err)
+	}
+
+	// Plugin registry
+	plugins := plugin.NewRegistry()
+
+	// Load plugins
+	if err := loadPluginsFromDir(plugins, cfg.PluginDir); err != nil {
+		fmt.Printf("Warning: plugin loading failed: %v\n", err)
+		// Continue without plugins - they're optional
+	}
+
+	// Initialize plugins
+	pluginConfigs := make(map[string]map[string]interface{})
+	// Load plugin configs from /etc/mandau/plugins/*.yaml
+	if err := plugins.Init(ctx, pluginConfigs); err != nil {
+		return nil, fmt.Errorf("plugin init: %w", err)
+	}
+
+	// Create managers
+	opMgr := operation.NewManager()
+	stackMgr := stack.NewManager(cfg.StackRoot, docker, opMgr)
+	containerMgr := container.NewManager()
+	fsMgr := filesystem.NewManager()
+
+	return &Agent{
+		config:       cfg,
+		docker:       docker,
+		plugins:      plugins,
+		opMgr:        opMgr,
+		stackMgr:     stackMgr,
+		containerMgr: containerMgr,
+		fsMgr:        fsMgr,
+	}, nil
+}
+
+func (a *Agent) Serve() error {
+	// Load certificates
+	cert, err := tls.LoadX509KeyPair(a.config.CertPath, a.config.KeyPath)
+	if err != nil {
+		return fmt.Errorf("load cert: %w", err)
+	}
+
+	// Load CA
+	caCert, err := ioutil.ReadFile(a.config.CAPath)
+	if err != nil {
+		return fmt.Errorf("load CA: %w", err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return fmt.Errorf("parse CA cert")
+	}
+
+	// mTLS configuration
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    caCertPool,
+		MinVersion:   tls.VersionTLS13,
+		CipherSuites: []uint16{
+			tls.TLS_AES_256_GCM_SHA384,
+			tls.TLS_AES_128_GCM_SHA256,
+			tls.TLS_CHACHA20_POLY1305_SHA256,
+		},
+	}
+
+	creds := credentials.NewTLS(tlsConfig)
+
+	// gRPC server with security interceptors
+	server := grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.MaxRecvMsgSize(10*1024*1024), // 10MB
+		grpc.MaxSendMsgSize(10*1024*1024),
+		grpc.ChainUnaryInterceptor(
+			a.authInterceptor,
+			a.auditInterceptor,
+			a.policyInterceptor,
+			a.recoveryInterceptor,
+		),
+		grpc.ChainStreamInterceptor(
+			a.authStreamInterceptor,
+			a.auditStreamInterceptor,
+			a.recoveryStreamInterceptor,
+		),
+	)
+
+	// Register all services
+	agentv1.RegisterAgentServiceServer(server, a)
+	agentv1.RegisterStackServiceServer(server, a)
+	agentv1.RegisterContainerServiceServer(server, a)
+	agentv1.RegisterFilesystemServiceServer(server, a)
+	agentv1.RegisterOperationsServiceServer(server, a)
+
+	// Listen
+	lis, err := net.Listen("tcp", a.config.ListenAddr)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+
+	fmt.Printf("Mandau Agent %s listening on %s\n", a.config.AgentID, a.config.ListenAddr)
+	fmt.Printf("Hostname: %s\n", a.config.Hostname)
+	fmt.Printf("Stack root: %s\n", a.config.StackRoot)
+	fmt.Printf("Plugins loaded: %d\n", len(a.plugins.ListAll()))
+
+	return server.Serve(lis)
+}
+
+func (a *Agent) Shutdown() {
+	fmt.Println("Shutting down agent...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Shutdown plugins
+	if err := a.plugins.ShutdownAll(ctx); err != nil {
+		fmt.Printf("Plugin shutdown error: %v\n", err)
+	}
+
+	// Close docker client
+	if a.docker != nil {
+		a.docker.Close()
+	}
+
+	fmt.Println("Agent stopped")
+}
+
+// =============================================================================
+// SECURITY INTERCEPTORS
+// =============================================================================
+
+func (a *Agent) authInterceptor(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	identity, err := a.extractIdentity(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "authentication failed")
+	}
+
+	// Authenticate via plugin
+	if auth := a.plugins.Auth(); auth != nil {
+		identity, err = auth.Authenticate(ctx, &plugin.AuthRequest{
+			Identity: identity,
+			Method:   info.FullMethod,
+		})
+		if err != nil {
+			return nil, status.Errorf(codes.Unauthenticated, "authentication failed")
+		}
+	}
+
+	ctx = plugin.WithIdentity(ctx, identity)
+	return handler(ctx, req)
+}
+
+func (a *Agent) policyInterceptor(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	identity := plugin.IdentityFromContext(ctx)
+
+	// Policy evaluation
+	if policy := a.plugins.Policy(); policy != nil {
+		decision, err := policy.Evaluate(ctx, &plugin.PolicyRequest{
+			Identity: identity,
+			Action: &plugin.Action{
+				Method: info.FullMethod,
+			},
+			Resource: extractResourceFromRequest(req),
+		})
+
+		if err != nil || !decision.Allowed {
+			return nil, status.Errorf(codes.PermissionDenied, "access denied: %s", decision.Reason)
+		}
+	}
+
+	return handler(ctx, req)
+}
+
+func (a *Agent) auditInterceptor(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	start := time.Now()
+	identity := plugin.IdentityFromContext(ctx)
+
+	resp, err := handler(ctx, req)
+
+	// Audit all calls
+	a.plugins.AuditAll(ctx, &plugin.AuditEntry{
+		Timestamp: start,
+		AgentID:   a.config.AgentID,
+		Identity:  identity,
+		Action:    info.FullMethod,
+		Resource:  extractResourceFromRequest(req).Identifier,
+		Result:    resultString(err),
+		Duration:  time.Since(start),
+		Metadata:  extractMetadata(req),
+	})
+
+	return resp, err
+}
+
+func (a *Agent) recoveryInterceptor(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (resp interface{}, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("PANIC in %s: %v\n", info.FullMethod, r)
+			err = status.Errorf(codes.Internal, "internal error")
+		}
+	}()
+
+	return handler(ctx, req)
+}
+
+func (a *Agent) authStreamInterceptor(
+	srv interface{},
+	ss grpc.ServerStream,
+	info *grpc.StreamServerInfo,
+	handler grpc.StreamHandler,
+) error {
+	ctx := ss.Context()
+
+	identity, err := a.extractIdentity(ctx)
+	if err != nil {
+		return status.Errorf(codes.Unauthenticated, "authentication failed")
+	}
+
+	if auth := a.plugins.Auth(); auth != nil {
+		identity, err = auth.Authenticate(ctx, &plugin.AuthRequest{
+			Identity: identity,
+			Method:   info.FullMethod,
+		})
+		if err != nil {
+			return status.Errorf(codes.Unauthenticated, "authentication failed")
+		}
+	}
+
+	wrapped := &wrappedStream{
+		ServerStream: ss,
+		ctx:          plugin.WithIdentity(ctx, identity),
+	}
+
+	return handler(srv, wrapped)
+}
+
+func (a *Agent) auditStreamInterceptor(
+	srv interface{},
+	ss grpc.ServerStream,
+	info *grpc.StreamServerInfo,
+	handler grpc.StreamHandler,
+) error {
+	start := time.Now()
+	ctx := ss.Context()
+	identity := plugin.IdentityFromContext(ctx)
+
+	err := handler(srv, ss)
+
+	a.plugins.AuditAll(ctx, &plugin.AuditEntry{
+		Timestamp: start,
+		AgentID:   a.config.AgentID,
+		Identity:  identity,
+		Action:    info.FullMethod,
+		Result:    resultString(err),
+		Duration:  time.Since(start),
+	})
+
+	return err
+}
+
+func (a *Agent) recoveryStreamInterceptor(
+	srv interface{},
+	ss grpc.ServerStream,
+	info *grpc.StreamServerInfo,
+	handler grpc.StreamHandler,
+) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("PANIC in stream %s: %v\n", info.FullMethod, r)
+			err = status.Errorf(codes.Internal, "internal error")
+		}
+	}()
+
+	return handler(srv, ss)
+}
+
+type wrappedStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (w *wrappedStream) Context() context.Context {
+	return w.ctx
+}
+
+func (a *Agent) extractIdentity(ctx context.Context) (*plugin.Identity, error) {
+	// Extract identity from mTLS certificate
+	peer, ok := peer.FromContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("no peer info")
+	}
+
+	tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo)
+	if !ok {
+		return nil, fmt.Errorf("no TLS info")
+	}
+
+	if len(tlsInfo.State.VerifiedChains) == 0 || len(tlsInfo.State.VerifiedChains[0]) == 0 {
+		return nil, fmt.Errorf("no verified certificate")
+	}
+
+	cert := tlsInfo.State.VerifiedChains[0][0]
+
+	return &plugin.Identity{
+		UserID:      cert.Subject.CommonName,
+		DeviceID:    extractDeviceID(cert),
+		Certificate: cert.Raw,
+		Attributes:  make(map[string]string),
+	}, nil
+}
+
+func extractDeviceID(cert *x509.Certificate) string {
+	// Extract from certificate extensions or subject
+	return cert.Subject.CommonName
+}
+
+func extractResourceFromRequest(req interface{}) *plugin.Resource {
+	// Extract resource info based on request type
+	// This is simplified - production would use type assertions
+	return &plugin.Resource{
+		Type:       "unknown",
+		Identifier: "",
+		Labels:     make(map[string]string),
+	}
+}
+
+func extractMetadata(req interface{}) map[string]string {
+	return make(map[string]string)
+}
+
+func resultString(err error) string {
+	if err != nil {
+		return "error"
+	}
+	return "success"
+}
+
+// =============================================================================
+// AGENT SERVICE IMPLEMENTATIONS
+// =============================================================================
+
+func (a *Agent) Register(ctx context.Context, req *agentv1.RegisterRequest) (*agentv1.RegisterResponse, error) {
+	return &agentv1.RegisterResponse{
+		AgentId:           a.config.AgentID,
+		HeartbeatInterval: durationpb.New(30 * time.Second),
+	}, nil
+}
+
+func (a *Agent) Heartbeat(ctx context.Context, req *agentv1.HeartbeatRequest) (*agentv1.HeartbeatResponse, error) {
+	return &agentv1.HeartbeatResponse{
+		Status: "healthy",
+	}, nil
+}
+
+func (a *Agent) GetCapabilities(ctx context.Context, req *agentv1.CapabilitiesRequest) (*agentv1.CapabilitiesResponse, error) {
+	return &agentv1.CapabilitiesResponse{
+		Capabilities: []string{
+			"stack.apply",
+			"stack.remove",
+			"container.exec",
+			"logs.stream",
+			"files.manage",
+		},
+	}, nil
+}
+
+func (a *Agent) GetHealth(ctx context.Context, req *agentv1.HealthRequest) (*agentv1.HealthResponse, error) {
+	// Check Docker health
+	_, err := a.docker.Ping(ctx, client.PingOptions{})
+
+	healthy := err == nil
+
+	return &agentv1.HealthResponse{
+		Healthy: healthy,
+		Status: map[string]string{
+			"docker": healthStatus(err),
+		},
+	}, nil
+}
+
+func healthStatus(err error) string {
+	if err != nil {
+		return "unhealthy"
+	}
+	return "healthy"
+}
+
+func loadPluginsFromDir(registry *plugin.Registry, dir string) error {
+	// In production, this would load .so files or run plugin binaries
+	// For now, register built-in plugins
+
+	// Register RBAC plugin
+	if err := registry.Register(rbac.New()); err != nil {
+		return err
+	}
+
+	// Register Vault plugin (if configured)
+	// Note: Vault plugin requires http client, skipping for now
+	// if err := registry.Register(vault.New()); err != nil {
+	//	return err
+	// }
+
+	return nil
+}
