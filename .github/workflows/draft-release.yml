@@ -1,0 +1,66 @@
+name: Create Draft Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., v1.0.0)'
+        required: true
+        default: 'v0.1.0'
+
+jobs:
+  create-draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the latest tag if any
+          LATEST_TAG=$(git tag --sort=-v:refname | head -n 1)
+          
+          if [ -z "$LATEST_TAG" ]; then
+            # If no previous tag, get all commits
+            COMMITS=$(git log --oneline --no-merges)
+          else
+            # Get commits since the latest tag
+            COMMITS=$(git log $LATEST_TAG..HEAD --oneline --no-merges)
+          fi
+          
+          # Write changelog to a file
+          echo "$COMMITS" > changelog.txt
+          
+          # Create a summary for the release body
+          {
+            echo "## What's Changed"
+            echo ""
+            echo "\`\`\`"
+            echo "$COMMITS"
+            echo "\`\`\`"
+            echo ""
+            echo "## Assets"
+            echo "- mandau-linux-amd64.tar.gz"
+            echo "- mandau-linux-arm64.tar.gz" 
+            echo "- mandau-darwin-amd64.tar.gz"
+            echo "- mandau-darwin-arm64.tar.gz"
+            echo "- mandau-windows-amd64.zip"
+          } > release_body.md
+          
+          # Set output
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          cat release_body.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          release_name: Release ${{ github.event.inputs.version }}
+          body: ${{ steps.changelog.outputs.body }}
+          draft: true
+          prerelease: false

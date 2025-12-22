@@ -28,7 +28,7 @@ func main() {
 		Use:   "mandau",
 		Short: "Mandau infrastructure control CLI",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			return cli.connect()
+			return cli.connect(cmd)
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 			if cli.conn != nil {
@@ -42,6 +42,7 @@ func main() {
 	rootCmd.PersistentFlags().String("server", "localhost:8443", "Core server address")
 	rootCmd.PersistentFlags().String("cert", "", "Client certificate")
 	rootCmd.PersistentFlags().String("key", "", "Client key")
+	rootCmd.PersistentFlags().String("ca", "", "CA certificate")
 
 	// Agent commands
 	agentCmd := &cobra.Command{
@@ -89,22 +90,29 @@ func main() {
 	}
 }
 
-func (c *CLI) connect() error {
-	serverAddr := os.Getenv("MANDAU_SERVER")
-	if serverAddr == "" {
-		serverAddr = "localhost:8443"
+func (c *CLI) connect(cmd *cobra.Command) error {
+	serverAddr, err := c.getFlagOrEnv(cmd, "server", "MANDAU_SERVER", "localhost:8443")
+	if err != nil {
+		return err
 	}
 
-	certFile := os.Getenv("MANDAU_CERT")
-	keyFile := os.Getenv("MANDAU_KEY")
-	caFile := os.Getenv("MANDAU_CA") // Allow specifying CA file
+	certFile, err := c.getFlagOrEnv(cmd, "cert", "MANDAU_CERT", "")
+	if err != nil {
+		return err
+	}
+
+	keyFile, err := c.getFlagOrEnv(cmd, "key", "MANDAU_KEY", "")
+	if err != nil {
+		return err
+	}
+
+	caFile, err := c.getFlagOrEnv(cmd, "ca", "MANDAU_CA", "./certs/ca.crt")
+	if err != nil {
+		return err
+	}
 
 	if certFile == "" || keyFile == "" {
 		return fmt.Errorf("client certificate required (MANDAU_CERT, MANDAU_KEY)")
-	}
-
-	if caFile == "" {
-		caFile = "./certs/ca.crt" // Default CA path
 	}
 
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
@@ -144,6 +152,27 @@ func (c *CLI) connect() error {
 	c.agentClient = agentv1.NewAgentServiceClient(conn)
 
 	return nil
+}
+
+// getFlagOrEnv gets a value from command line flag or environment variable
+func (c *CLI) getFlagOrEnv(cmd *cobra.Command, flagName, envName, defaultValue string) (string, error) {
+	// First check command line flag
+	value, err := cmd.Flags().GetString(flagName)
+	if err != nil {
+		return "", fmt.Errorf("get flag %s: %w", flagName, err)
+	}
+
+	// If flag is not set, check environment variable
+	if value == "" {
+		value = os.Getenv(envName)
+	}
+
+	// If environment variable is not set, use default value
+	if value == "" {
+		value = defaultValue
+	}
+
+	return value, nil
 }
 
 func (c *CLI) listAgents(cmd *cobra.Command, args []string) error {

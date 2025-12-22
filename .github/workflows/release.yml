@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Get tag
+        id: tag
+        run: |
+          echo "tag=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT
+          echo "version=${GITHUB_REF#refs/*/v}" >> $GITHUB_OUTPUT
+
+      - name: Install zip tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+
+      - name: Build binaries
+        run: |
+          make build
+          mkdir -p dist
+
+          # Build for different platforms
+          # Linux AMD64
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 make build-static
+          tar -czf dist/mandau-linux-amd64-${{ steps.tag.outputs.version }}.tar.gz -C bin mandau mandau-core mandau-agent
+
+          # Linux ARM64
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 make build-static
+          tar -czf dist/mandau-linux-arm64-${{ steps.tag.outputs.version }}.tar.gz -C bin mandau mandau-core mandau-agent
+
+          # macOS AMD64
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 make build-static
+          tar -czf dist/mandau-darwin-amd64-${{ steps.tag.outputs.version }}.tar.gz -C bin mandau mandau-core mandau-agent
+
+          # macOS ARM64
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 make build-static
+          tar -czf dist/mandau-darwin-arm64-${{ steps.tag.outputs.version }}.tar.gz -C bin mandau mandau-core mandau-agent
+
+          # Windows AMD64
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 make build-static
+          zip dist/mandau-windows-amd64-${{ steps.tag.outputs.version }}.zip bin/mandau.exe bin/mandau-core.exe bin/mandau-agent.exe
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Release ${{ steps.tag.outputs.tag }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/mandau-linux-amd64-*.tar.gz
+            dist/mandau-linux-arm64-*.tar.gz
+            dist/mandau-darwin-amd64-*.tar.gz
+            dist/mandau-darwin-arm64-*.tar.gz
+            dist/mandau-windows-amd64-*.zip
+          body: |
+            ## Mandau ${{ steps.tag.outputs.tag }}
+
+            This release includes the following binaries for different platforms:
+            
+            - Linux AMD64
+            - Linux ARM64
+            - macOS AMD64
+            - macOS ARM64
+            - Windows AMD64
+
+            ### Installation
+
+            Download the appropriate archive for your platform and extract the binaries.
+
+            ### Changelog
+
+            ${{ env.GITHUB_REF_NAME }}

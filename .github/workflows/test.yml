@@ -1,0 +1,46 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ '1.21', '1.22' ]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+        cache: true
+
+    - name: Generate proto files
+      run: make proto
+
+    - name: Build
+      run: make build
+
+    - name: Test
+      run: make test
+
+    - name: Build static binaries
+      run: make build-static
+
+    - name: Generate certificates for testing
+      run: make certs
+
+    - name: Verify binaries exist
+      run: |
+        ls -la bin/
+        test -f bin/mandau
+        test -f bin/mandau-core
+        test -f bin/mandau-agent

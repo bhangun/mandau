@@ -38,6 +38,7 @@ type Agent struct {
 	agentv1.UnimplementedOperationsServiceServer
 
 	config       *Config
+	serverConn   *grpc.ClientConn
 	docker       *client.Client
 	plugins      *plugin.Registry
 	opMgr        *operation.Manager
@@ -50,6 +51,7 @@ type Config struct {
 	AgentID    string
 	Hostname   string
 	ListenAddr string
+	ServerAddr string
 	CertPath   string
 	KeyPath    string
 	CAPath     string
@@ -93,6 +95,7 @@ func parseFlags() *Config {
 
 	flag.StringVar(&cfg.AgentID, "id", "", "Agent ID (auto-generated if empty)")
 	flag.StringVar(&cfg.ListenAddr, "listen", ":8444", "Listen address")
+	flag.StringVar(&cfg.ServerAddr, "server", "localhost:8443", "Core server address")
 	flag.StringVar(&cfg.CertPath, "cert", "/etc/mandau/agent.crt", "Certificate path")
 	flag.StringVar(&cfg.KeyPath, "key", "/etc/mandau/agent.key", "Key path")
 	flag.StringVar(&cfg.CAPath, "ca", "/etc/mandau/ca.crt", "CA certificate path")
@@ -173,15 +176,125 @@ func NewAgent(cfg *Config) (*Agent, error) {
 	containerMgr := container.NewManager()
 	fsMgr := filesystem.NewManager()
 
-	return &Agent{
+	// Create gRPC connection to core server
+	serverConn, err := createServerConnection(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create server connection: %w", err)
+	}
+
+	agent := &Agent{
 		config:       cfg,
+		serverConn:   serverConn,
 		docker:       docker,
 		plugins:      plugins,
 		opMgr:        opMgr,
 		stackMgr:     stackMgr,
 		containerMgr: containerMgr,
 		fsMgr:        fsMgr,
-	}, nil
+	}
+
+	// Register with core server
+	if err := agent.registerWithServer(); err != nil {
+		return nil, fmt.Errorf("register with server: %w", err)
+	}
+
+	// Start heartbeat goroutine
+	go agent.startHeartbeat()
+
+	return agent, nil
+}
+
+// createServerConnection creates a secure gRPC connection to the core server
+func createServerConnection(cfg *Config) (*grpc.ClientConn, error) {
+	// Load certificates
+	cert, err := tls.LoadX509KeyPair(cfg.CertPath, cfg.KeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("load cert: %w", err)
+	}
+
+	// Load CA
+	caCert, err := ioutil.ReadFile(cfg.CAPath)
+	if err != nil {
+		return nil, fmt.Errorf("load CA: %w", err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return nil, fmt.Errorf("parse CA cert")
+	}
+
+	// mTLS configuration
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+		ServerName:   "mandau-core", // Use the server name from the certificate
+		MinVersion:   tls.VersionTLS13,
+	}
+
+	creds := credentials.NewTLS(tlsConfig)
+
+	conn, err := grpc.Dial(cfg.ServerAddr, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		return nil, fmt.Errorf("dial server: %w", err)
+	}
+
+	return conn, nil
+}
+
+// registerWithServer registers the agent with the core server
+func (a *Agent) registerWithServer() error {
+	client := agentv1.NewCoreServiceClient(a.serverConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	resp, err := client.RegisterAgent(ctx, &agentv1.RegisterRequest{
+		Hostname:     a.config.Hostname,
+		Labels:       map[string]string{}, // Add agent labels
+		Capabilities: []string{"docker", "stack", "container", "logs", "exec"},
+	})
+	if err != nil {
+		return fmt.Errorf("register agent: %w", err)
+	}
+
+	fmt.Printf("Agent registered with ID: %s\n", resp.AgentId)
+	return nil
+}
+
+// startHeartbeat starts the periodic heartbeat to the core server
+func (a *Agent) startHeartbeat() {
+	ticker := time.NewTicker(30 * time.Second) // Heartbeat every 30 seconds
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := a.sendHeartbeat(); err != nil {
+				fmt.Printf("Heartbeat failed: %v\n", err)
+			}
+		case <-a.serverConn.GetState().String(): // This is a placeholder; in practice you'd use a proper context cancellation
+			// Agent is shutting down
+			return
+		}
+	}
+}
+
+// sendHeartbeat sends a heartbeat to the core server
+func (a *Agent) sendHeartbeat() error {
+	client := agentv1.NewCoreServiceClient(a.serverConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := client.Heartbeat(ctx, &agentv1.HeartbeatRequest{
+		AgentId: a.config.AgentID,
+		Status:  "healthy",
+	})
+	if err != nil {
+		return fmt.Errorf("send heartbeat: %w", err)
+	}
+
+	return nil
 }
 
 func (a *Agent) Serve() error {

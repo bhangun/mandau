@@ -99,26 +99,21 @@
    sudo systemctl status mandau-core mandau-agent
    ```
 
-4. **Start Agent:**
-   ```bash
-   sudo systemctl enable mandau-agent
-   sudo systemctl start mandau-agent
-   ```
-
-5. **Start Core (control plane):**
-   ```bash
-   sudo systemctl enable mandau-core
-   sudo systemctl start mandau-core
-   ```
-
 ## Usage
 
 ### CLI Configuration
 
+**Option 1: Using environment variables**
 ```bash
 export MANDAU_SERVER=localhost:8443
 export MANDAU_CERT=/etc/mandau/certs/client.crt
 export MANDAU_KEY=/etc/mandau/certs/client.key
+export MANDAU_CA=/etc/mandau/certs/ca.crt
+```
+
+**Option 2: Using command-line flags**
+```bash
+mandau --server localhost:8443 --cert /etc/mandau/certs/client.crt --key /etc/mandau/certs/client.key --ca /etc/mandau/certs/ca.crt agent list
 ```
 
 ### List Agents
@@ -182,3 +177,14 @@ Verify certificates:
 openssl verify -CAfile /etc/mandau/certs/ca.crt \
   /etc/mandau/certs/agent.crt
 ```
+
+### Common TLS Issues
+
+**Error: "tls: bad certificate"**
+- Ensure the CA certificate is provided to both client and server
+- Use `--ca` flag or `MANDAU_CA` environment variable
+- Verify certificates are properly signed by the same CA
+
+**Error: "certificate signed by unknown authority"**
+- Check that the correct CA certificate is being used
+- Regenerate certificates if needed: `make certs`

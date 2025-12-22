@@ -3,7 +3,9 @@ package core
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"sync"
@@ -113,8 +115,20 @@ func (c *Core) Serve() error {
 		return fmt.Errorf("load cert: %w", err)
 	}
 
+	// Load CA certificate to verify client certificates
+	caCert, err := ioutil.ReadFile(c.config.CAPath)
+	if err != nil {
+		return fmt.Errorf("load CA cert: %w", err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return fmt.Errorf("parse CA cert")
+	}
+
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert},
+		ClientCAs:    caCertPool,
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		MinVersion:   tls.VersionTLS13,
 	}

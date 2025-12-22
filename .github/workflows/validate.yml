@@ -1,0 +1,22 @@
+name: Workflow Status Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check workflow files exist
+        run: |
+          ls -la .github/workflows/
+          test -f .github/workflows/release.yml
+          test -f .github/workflows/test.yml
+          test -f .github/workflows/docker.yml
+          test -f .github/workflows/draft-release.yml

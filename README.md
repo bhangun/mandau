@@ -182,9 +182,11 @@ make certs
 ### 5. Use CLI
 
 ```bash
+# Option 1: Using environment variables
 export MANDAU_SERVER=localhost:8080
 export MANDAU_CERT=./certs/client.crt
 export MANDAU_KEY=./certs/client.key
+export MANDAU_CA=./certs/ca.crt
 
 # List agents
 ./bin/mandau agent list
@@ -194,6 +196,17 @@ export MANDAU_KEY=./certs/client.key
 
 # Stream logs
 ./bin/mandau stack logs agent-001 web
+```
+
+```bash
+# Option 2: Using command-line flags
+./bin/mandau --server localhost:8080 --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt agent list
+
+# Deploy a stack
+./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt stack apply agent-001 web ./compose.yaml
+
+# Stream logs
+./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt stack logs agent-001 web
 ```
 
 ## 🔒 Security Model
@@ -419,6 +432,32 @@ agent:
 3. Write tests
 4. Run `make test`
 5. Submit pull request
+
+## 🚀 CI/CD
+
+### GitHub Actions Workflows
+
+Mandau uses GitHub Actions for automated testing, building, and releasing:
+
+- **Build and Test**: Runs on every PR and push to main, testing with multiple Go versions
+- **Release**: Creates GitHub releases with binaries for multiple platforms when tags are pushed
+- **Docker**: Builds and pushes Docker images to GitHub Container Registry
+- **Draft Release**: Manual workflow to create draft releases with changelogs
+
+### Creating a Release
+
+To create a new release:
+
+1. Create and push a new tag:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+2. GitHub Actions will automatically:
+   - Build static binaries for Linux, macOS, and Windows
+   - Create a GitHub release with the binaries
+   - Build and push Docker images to ghcr.io
 
 ## 📄 License
 
