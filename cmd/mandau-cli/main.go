@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 	agentv1 "github.com/bhangun/mandau/api/v1"
+	"github.com/bhangun/mandau/pkg/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -19,6 +20,7 @@ type CLI struct {
 	coreClient agentv1.CoreServiceClient
 	agentClient agentv1.AgentServiceClient
 	conn   *grpc.ClientConn
+	config *config.CoreConfig  // For CLI, we can reuse the core config structure
 }
 
 func main() {
@@ -91,6 +93,17 @@ func main() {
 }
 
 func (c *CLI) connect(cmd *cobra.Command) error {
+	// Try to load configuration from file first
+	configPath := config.GetConfigPath("config/core/config.yaml")
+	cfg, err := config.LoadCoreConfig(configPath)
+	if err != nil {
+		// Config file not found, proceed with command-line flags/env vars
+		fmt.Printf("Config file not found at %s, using command-line flags/environment variables\n", configPath)
+	} else {
+		fmt.Printf("Loaded configuration from %s\n", configPath)
+		c.config = cfg
+	}
+
 	serverAddr, err := c.getFlagOrEnv(cmd, "server", "MANDAU_SERVER", "localhost:8443")
 	if err != nil {
 		return err
@@ -109,6 +122,22 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 	caFile, err := c.getFlagOrEnv(cmd, "ca", "MANDAU_CA", "./certs/ca.crt")
 	if err != nil {
 		return err
+	}
+
+	// If config was loaded, use values from config as defaults if not provided via CLI/env
+	if c.config != nil {
+		if serverAddr == "localhost:8443" { // If using default and config has a value
+			serverAddr = c.config.Server.ListenAddr
+		}
+		if certFile == "" && c.config.Server.TLS.CertPath != "" {
+			certFile = c.config.Server.TLS.CertPath
+		}
+		if keyFile == "" && c.config.Server.TLS.KeyPath != "" {
+			keyFile = c.config.Server.TLS.KeyPath
+		}
+		if caFile == "./certs/ca.crt" && c.config.Server.TLS.CAPath != "" {
+			caFile = c.config.Server.TLS.CAPath
+		}
 	}
 
 	if certFile == "" || keyFile == "" {

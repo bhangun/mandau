@@ -20,6 +20,7 @@ import (
 	"github.com/bhangun/mandau/pkg/agent/filesystem"
 	"github.com/bhangun/mandau/pkg/agent/operation"
 	"github.com/bhangun/mandau/pkg/agent/stack"
+	"github.com/bhangun/mandau/pkg/config"
 	"github.com/bhangun/mandau/pkg/plugin"
 	"github.com/bhangun/mandau/plugins/auth/rbac"
 	"github.com/moby/moby/client"
@@ -62,10 +63,79 @@ type Config struct {
 	StackRoot  string
 	PluginDir  string
 	Labels     map[string]string
+	// Add a field to hold the full configuration
+	FullConfig *config.AgentConfig
 }
 
 func main() {
-	cfg := parseFlags()
+	// Parse only the config flag from command line args
+	// Skip the first argument (program name) and look for --config
+	args := os.Args[1:]
+	configFilePath := "config/agent/config.yaml"
+
+	// Find and extract config file path
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--config" && i+1 < len(args) {
+			configFilePath = args[i+1]
+			break
+		} else if args[i] == "-config" && i+1 < len(args) {
+			configFilePath = args[i+1]
+			break
+		} else if strings.HasPrefix(args[i], "--config=") {
+			configFilePath = strings.TrimPrefix(args[i], "--config=")
+			break
+		} else if strings.HasPrefix(args[i], "-config=") {
+			configFilePath = strings.TrimPrefix(args[i], "-config=")
+			break
+		}
+	}
+
+	// Load configuration from file if available
+	agentConfig, err := config.LoadAgentConfig(configFilePath)
+	if err != nil {
+		fmt.Printf("Config file not found at %s, using defaults: %v\n", configFilePath, err)
+		agentConfig = config.CreateDefaultAgentConfig()
+	} else {
+		fmt.Printf("Loaded configuration from %s\n", configFilePath)
+	}
+
+	// Filter out config-related arguments for regular flag parsing
+	filteredArgs := filterConfigArgs(os.Args[1:])
+
+	// Now parse all other flags
+	cfg := parseFlags(filteredArgs)
+
+	// Apply configuration file values as defaults, but allow command-line overrides
+	if agentConfig.Server.ListenAddr != "" && cfg.ListenAddr == ":8444" {
+		// Only use config file value if the default was used (not overridden by CLI)
+		cfg.ListenAddr = agentConfig.Server.ListenAddr
+	}
+	if agentConfig.Server.TLS.CertPath != "" {
+		cfg.CertPath = agentConfig.Server.TLS.CertPath
+	}
+	if agentConfig.Server.TLS.KeyPath != "" {
+		cfg.KeyPath = agentConfig.Server.TLS.KeyPath
+	}
+	if agentConfig.Server.TLS.CAPath != "" {
+		cfg.CAPath = agentConfig.Server.TLS.CAPath
+	}
+
+	// Use server connection config for core server address if available
+	if agentConfig.ServerConnection.CoreAddr != "" {
+		cfg.ServerAddr = agentConfig.ServerConnection.CoreAddr
+	}
+
+	if agentConfig.Stacks.RootDir != "" {
+		cfg.StackRoot = agentConfig.Stacks.RootDir
+	}
+	if agentConfig.Agent.Labels != nil {
+		for k, v := range agentConfig.Agent.Labels {
+			cfg.Labels[k] = v
+		}
+	}
+
+	// Store the full configuration
+	cfg.FullConfig = agentConfig
 
 	agent, err := NewAgent(cfg)
 	if err != nil {
@@ -92,21 +162,44 @@ func main() {
 	}
 }
 
-func parseFlags() *Config {
+// filterConfigArgs removes config-related arguments from the command line args
+func filterConfigArgs(args []string) []string {
+	var filtered []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--config" || args[i] == "-config" {
+			// Skip this argument and the next one (the value)
+			i++
+			continue
+		} else if strings.HasPrefix(args[i], "--config=") || strings.HasPrefix(args[i], "-config=") {
+			// Skip this argument entirely
+			continue
+		} else {
+			// Keep this argument
+			filtered = append(filtered, args[i])
+		}
+	}
+	return filtered
+}
+
+func parseFlags(configArgs []string) *Config {
 	cfg := &Config{
 		Labels: make(map[string]string),
 	}
 
-	flag.StringVar(&cfg.AgentID, "id", "", "Agent ID (auto-generated if empty)")
-	flag.StringVar(&cfg.ListenAddr, "listen", ":8444", "Listen address")
-	flag.StringVar(&cfg.ServerAddr, "server", "localhost:8443", "Core server address")
-	flag.StringVar(&cfg.CertPath, "cert", "/etc/mandau/agent.crt", "Certificate path")
-	flag.StringVar(&cfg.KeyPath, "key", "/etc/mandau/agent.key", "Key path")
-	flag.StringVar(&cfg.CAPath, "ca", "/etc/mandau/ca.crt", "CA certificate path")
-	flag.StringVar(&cfg.StackRoot, "stack-root", "/var/lib/mandau/stacks", "Stack root directory")
-	flag.StringVar(&cfg.PluginDir, "plugin-dir", "/usr/lib/mandau/plugins", "Plugin directory")
+	// Create a new flag set that uses the filtered arguments
+	flagSet := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	flag.Parse()
+	flagSet.StringVar(&cfg.AgentID, "id", "", "Agent ID (auto-generated if empty)")
+	flagSet.StringVar(&cfg.ListenAddr, "listen", ":8444", "Listen address")
+	flagSet.StringVar(&cfg.ServerAddr, "server", "localhost:8443", "Core server address")
+	flagSet.StringVar(&cfg.CertPath, "cert", "/etc/mandau/agent.crt", "Certificate path")
+	flagSet.StringVar(&cfg.KeyPath, "key", "/etc/mandau/agent.key", "Key path")
+	flagSet.StringVar(&cfg.CAPath, "ca", "/etc/mandau/ca.crt", "CA certificate path")
+	flagSet.StringVar(&cfg.StackRoot, "stack-root", "/var/lib/mandau/stacks", "Stack root directory")
+	flagSet.StringVar(&cfg.PluginDir, "plugin-dir", "/usr/lib/mandau/plugins", "Plugin directory")
+
+	// Parse the filtered arguments
+	flagSet.Parse(configArgs)
 
 	// Get hostname
 	hostname, err := os.Hostname()
@@ -162,53 +255,13 @@ func NewAgent(cfg *Config) (*Agent, error) {
 	plugins := plugin.NewRegistry()
 
 	// Load plugins
-	if err := loadPluginsFromDir(plugins, cfg.PluginDir); err != nil {
+	if err := loadPluginsFromDir(plugins, cfg.PluginDir, cfg.FullConfig.Plugins); err != nil {
 		fmt.Printf("Warning: plugin loading failed: %v\n", err)
 		// Continue without plugins - they're optional
 	}
 
-	// Initialize plugins
-	pluginConfigs := make(map[string]map[string]interface{})
-
-	// Configure RBAC plugin with default users
-	pluginConfigs["rbac-auth"] = map[string]interface{}{
-		"roles": `
-roles:
-  - name: admin
-    permissions:
-      - resource: "*"
-        actions: ["*"]
-  - name: operator
-    permissions:
-      - resource: "stack:*"
-        actions: ["read", "write", "delete"]
-      - resource: "container:*"
-        actions: ["read", "exec", "logs"]
-      - resource: "image:*"
-        actions: ["read", "pull"]
-      - resource: "file:*"
-        actions: ["read", "write"]
-  - name: viewer
-    permissions:
-      - resource: "*"
-        actions: ["read", "logs"]
-users:
-  - id: "mandau-core"
-    name: "Core Server"
-    roles: ["admin"]  # Core server has admin privileges to forward requests
-  - id: "mandau-cli"
-    name: "CLI User"
-    roles: ["admin"]
-  - id: "admin@example.com"
-    name: "Administrator"
-    roles: ["admin"]
-  - id: "ops@example.com"
-    name: "Operations Team"
-    roles: ["operator"]
-`,
-	}
-
-	if err := plugins.Init(ctx, pluginConfigs); err != nil {
+	// Initialize plugins with configuration from config file
+	if err := plugins.Init(ctx, cfg.FullConfig.Plugins.Configs); err != nil {
 		return nil, fmt.Errorf("plugin init: %w", err)
 	}
 
@@ -1050,20 +1103,23 @@ func convertDiffAction(action stack.DiffAction) agentv1.DiffAction {
 	}
 }
 
-func loadPluginsFromDir(registry *plugin.Registry, dir string) error {
-	// In production, this would load .so files or run plugin binaries
-	// For now, register built-in plugins
+func loadPluginsFromDir(registry *plugin.Registry, dir string, pluginConfig config.PluginConfig) error {
+	// Load plugins based on configuration
+	for pluginName, isEnabled := range pluginConfig.Enabled {
+		if !isEnabled {
+			continue
+		}
 
-	// Register RBAC plugin
-	if err := registry.Register(rbac.New()); err != nil {
-		return err
+		switch pluginName {
+		case "rbac-auth":
+			rbacPlugin := rbac.New()
+			if err := registry.Register(rbacPlugin); err != nil {
+				return fmt.Errorf("register rbac plugin: %w", err)
+			}
+		default:
+			fmt.Printf("Unknown plugin: %s\n", pluginName)
+		}
 	}
-
-	// Register Vault plugin (if configured)
-	// Note: Vault plugin requires http client, skipping for now
-	// if err := registry.Register(vault.New()); err != nil {
-	//	return err
-	// }
 
 	return nil
 }

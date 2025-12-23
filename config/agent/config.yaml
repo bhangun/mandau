@@ -1,16 +1,40 @@
+agent:
+  id: ""
+  hostname: ""
+  labels:
+    environment: "development"
+    datacenter: "local"
+    zone: "local"
+
 server:
-  listen_addr: ":8443"
+  listen_addr: ":8444"
   tls:
-    cert_path: "certs/core.crt"
-    key_path: "certs/core.key"
+    cert_path: "certs/agent.crt"
+    key_path: "certs/agent.key"
+    ca_path: "certs/ca.crt"
+    min_version: "TLS1.3"
+    server_name: "mandau-agent"
+
+server_connection:
+  core_addr: "localhost:8443"
+  tls:
+    cert_path: "certs/agent.crt"
+    key_path: "certs/agent.key"
     ca_path: "certs/ca.crt"
     min_version: "TLS1.3"
     server_name: "mandau-core"
 
+docker:
+  socket: "/var/run/docker.sock"
+  api_version: "1.41"
+
+stacks:
+  root_dir: "./stacks"
+  max_concurrent_operations: 5
+
 plugins:
   enabled:
     rbac-auth: true
-    file-audit: true
   configs:
     rbac-auth:
       roles: |
@@ -34,22 +58,20 @@ plugins:
               - resource: "*"
                 actions: ["read", "logs"]
         users:
+          - id: "mandau-core"
+            name: "Core Server"
+            roles: ["admin"]
+          - id: "mandau-cli"
+            name: "CLI User"
+            roles: ["admin"]
           - id: "admin@example.com"
             name: "Administrator"
             roles: ["admin"]
           - id: "ops@example.com"
             name: "Operations Team"
             roles: ["operator"]
-          - id: "mandau-agent"
-            name: "Agent User"
-            roles: ["admin"]  # Agent needs admin rights to manage stacks on its host
-          - id: "mandau-cli"
-            name: "CLI User"
-            roles: ["admin"]
 
-agent_management:
-  heartbeat_interval: "30s"
-  offline_timeout: "90s"
-  auto_deregister: false
-
-plugin_dir: "/usr/lib/mandau/plugins"
+security:
+  exec_timeout: "1h"
+  log_retention: "30d"
+  terminal_recording: true

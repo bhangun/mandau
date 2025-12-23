@@ -13,6 +13,7 @@ import (
 	"time"
 
 	agentv1 "github.com/bhangun/mandau/api/v1"
+	"github.com/bhangun/mandau/pkg/config"
 	"github.com/bhangun/mandau/pkg/plugin"
 	"github.com/bhangun/mandau/plugins/auth/rbac"
 	"google.golang.org/grpc"
@@ -41,6 +42,8 @@ type CoreConfig struct {
 	KeyPath    string
 	CAPath     string
 	PluginDir  string
+	// Add a field to hold the full configuration
+	FullConfig *config.CoreConfig
 }
 
 type AgentRegistry struct {
@@ -95,10 +98,41 @@ func (a *AuditLogger) LogAgentOffline(ctx context.Context, agentID string) {
 func NewCore(cfg *CoreConfig) (*Core, error) {
 	plugins := plugin.NewRegistry()
 
+	// Load the full configuration from file if available
+	configPath := config.GetConfigPath("config/core/config.yaml")
+	fullConfig, err := config.LoadCoreConfig(configPath)
+	if err != nil {
+		// If config file doesn't exist, create a default one
+		log.Printf("Config file not found at %s, using defaults: %v", configPath, err)
+		fullConfig = config.CreateDefaultCoreConfig()
+	} else {
+		log.Printf("Loaded configuration from %s", configPath)
+	}
+
 	// Load plugins
-	if err := loadPlugins(plugins, cfg.PluginDir); err != nil {
+	if err := loadPlugins(plugins, cfg.PluginDir, fullConfig.Plugins); err != nil {
 		return nil, fmt.Errorf("load plugins: %w", err)
 	}
+
+	// Update the CoreConfig with values from the loaded config
+	if fullConfig.Server.ListenAddr != "" {
+		cfg.ListenAddr = fullConfig.Server.ListenAddr
+	}
+	if fullConfig.Server.TLS.CertPath != "" {
+		cfg.CertPath = fullConfig.Server.TLS.CertPath
+	}
+	if fullConfig.Server.TLS.KeyPath != "" {
+		cfg.KeyPath = fullConfig.Server.TLS.KeyPath
+	}
+	if fullConfig.Server.TLS.CAPath != "" {
+		cfg.CAPath = fullConfig.Server.TLS.CAPath
+	}
+	if fullConfig.PluginDir != "" {
+		cfg.PluginDir = fullConfig.PluginDir
+	}
+
+	// Store the full configuration
+	cfg.FullConfig = fullConfig
 
 	return &Core{
 		config:  cfg,
@@ -109,60 +143,29 @@ func NewCore(cfg *CoreConfig) (*Core, error) {
 	}, nil
 }
 
-func loadPlugins(plugins *plugin.Registry, dir string) error {
-	// For now, register built-in plugins with default configuration
-	// In a real system, this would load plugin configurations from files
+func loadPlugins(plugins *plugin.Registry, dir string, pluginConfig config.PluginConfig) error {
+	// Load plugins based on configuration
+	for pluginName, isEnabled := range pluginConfig.Enabled {
+		if !isEnabled {
+			continue
+		}
 
-	// Load RBAC plugin with default configuration
-	rbacPlugin := rbac.New()
-
-	// Default configuration for RBAC plugin - map certificate CN to users
-	// In production, this would be loaded from a config file
-	rbacConfig := map[string]interface{}{
-		"roles": `
-roles:
-  - name: admin
-    permissions:
-      - resource: "*"
-        actions: ["*"]
-  - name: operator
-    permissions:
-      - resource: "stack:*"
-        actions: ["read", "write", "delete"]
-      - resource: "container:*"
-        actions: ["read", "exec", "logs"]
-      - resource: "image:*"
-        actions: ["read", "pull"]
-      - resource: "file:*"
-        actions: ["read", "write"]
-  - name: viewer
-    permissions:
-      - resource: "*"
-        actions: ["read", "logs"]
-users:
-  - id: "mandau-cli"
-    name: "CLI User"
-    roles: ["admin"]
-  - id: "mandau-agent"
-    name: "Agent User"
-    roles: ["admin"]  # Agent needs admin rights to manage stacks on its host
-  - id: "admin@example.com"
-    name: "Administrator"
-    roles: ["admin"]
-  - id: "ops@example.com"
-    name: "Operations Team"
-    roles: ["operator"]
-`,
+		switch pluginName {
+		case "rbac-auth":
+			rbacPlugin := rbac.New()
+			if err := plugins.Register(rbacPlugin); err != nil {
+				return fmt.Errorf("register rbac plugin: %w", err)
+			}
+		case "file-audit":
+			// For now, we'll log that this plugin is not implemented
+			log.Printf("File audit plugin not implemented in this build")
+		default:
+			log.Printf("Unknown plugin: %s", pluginName)
+		}
 	}
 
-	if err := plugins.Register(rbacPlugin); err != nil {
-		return fmt.Errorf("register rbac plugin: %w", err)
-	}
-
-	// Initialize plugins with configuration
-	if err := plugins.Init(context.Background(), map[string]map[string]interface{}{
-		"rbac-auth": rbacConfig,
-	}); err != nil {
+	// Initialize plugins with their configurations
+	if err := plugins.Init(context.Background(), pluginConfig.Configs); err != nil {
 		return fmt.Errorf("init plugins: %w", err)
 	}
 
