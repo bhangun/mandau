@@ -26,13 +26,14 @@ type Plugin interface {
 type Capability string
 
 const (
-	CapabilityAuth    Capability = "auth"
-	CapabilityAudit   Capability = "audit"
-	CapabilitySecrets Capability = "secrets"
-	CapabilityPolicy  Capability = "policy"
-	CapabilityStorage Capability = "storage"
-	CapabilityMonitor Capability = "monitoring"
-	CapabilityNotify  Capability = "notifications"
+	CapabilityAuth     Capability = "auth"
+	CapabilityAudit    Capability = "audit"
+	CapabilitySecrets  Capability = "secrets"
+	CapabilityPolicy   Capability = "policy"
+	CapabilityStorage  Capability = "storage"
+	CapabilityMonitor  Capability = "monitoring"
+	CapabilityNotify   Capability = "notifications"
+	CapabilitySecurity Capability = "security"
 )
 
 // AuthPlugin handles authentication and authorization

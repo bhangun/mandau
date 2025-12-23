@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -208,9 +209,21 @@ func parseFlags(configArgs []string) *Config {
 	}
 	cfg.Hostname = hostname
 
-	// Generate agent ID if not provided
+	// Use provided agent ID, or load from persistent storage, or generate new one
 	if cfg.AgentID == "" {
-		cfg.AgentID = fmt.Sprintf("agent-%s", hostname)
+		// Try to load persistent agent ID from file
+		persistentID := loadPersistentAgentID()
+		if persistentID != "" {
+			cfg.AgentID = persistentID
+		} else {
+			// Generate new agent ID based on hostname
+			cfg.AgentID = fmt.Sprintf("agent-%s", hostname)
+			// Save the new ID for persistence
+			savePersistentAgentID(cfg.AgentID)
+		}
+	} else {
+		// If agent ID is provided via CLI, save it for persistence
+		savePersistentAgentID(cfg.AgentID)
 	}
 
 	return cfg
@@ -363,6 +376,7 @@ func (a *Agent) registerWithServer() error {
 
 	resp, err := client.RegisterAgent(ctx, &agentv1.RegisterRequest{
 		Hostname:     a.config.Hostname,
+		AgentId:      a.config.AgentID, // Send persistent agent ID
 		Labels:       map[string]string{}, // Add agent labels
 		Capabilities: []string{"docker", "stack", "container", "logs", "exec"},
 	})
@@ -1122,4 +1136,53 @@ func loadPluginsFromDir(registry *plugin.Registry, dir string, pluginConfig conf
 	}
 
 	return nil
+}
+
+// loadPersistentAgentID loads the agent ID from a persistent file
+func loadPersistentAgentID() string {
+	// Try to read agent ID from a persistent file
+	idFile := getAgentIDFilePath()
+	if _, err := os.Stat(idFile); os.IsNotExist(err) {
+		return "" // File doesn't exist yet
+	}
+
+	data, err := ioutil.ReadFile(idFile)
+	if err != nil {
+		fmt.Printf("Warning: could not read agent ID file: %v\n", err)
+		return ""
+	}
+
+	id := strings.TrimSpace(string(data))
+	if id == "" {
+		return ""
+	}
+
+	return id
+}
+
+// savePersistentAgentID saves the agent ID to a persistent file
+func savePersistentAgentID(id string) {
+	idFile := getAgentIDFilePath()
+
+	// Create directory if it doesn't exist
+	dir := filepath.Dir(idFile)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		fmt.Printf("Warning: could not create directory for agent ID file: %v\n", err)
+		return
+	}
+
+	if err := ioutil.WriteFile(idFile, []byte(id), 0600); err != nil {
+		fmt.Printf("Warning: could not save agent ID to file: %v\n", err)
+	}
+}
+
+// getAgentIDFilePath returns the path to the agent ID file
+func getAgentIDFilePath() string {
+	// Use the stack root directory to store the agent ID
+	stackRoot := "./stacks" // Default from config - we'll get this from agent config
+	if _, err := os.Stat(stackRoot); os.IsNotExist(err) {
+		// Create stacks directory if it doesn't exist
+		os.MkdirAll(stackRoot, 0755)
+	}
+	return filepath.Join(stackRoot, ".agent_id")
 }

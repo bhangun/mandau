@@ -39,6 +39,7 @@ service AgentService {
 message RegisterRequest {
   string hostname = 1;
   string version = 2;
+  string agent_id = 5;  // Optional persistent agent ID
   map<string, string> labels = 3;
   repeated string capabilities = 4;
 }

@@ -240,7 +240,13 @@ func (c *Core) RegisterAgent(ctx context.Context, req *agentv1.RegisterRequest) 
 	c.agents.mu.Lock()
 	defer c.agents.mu.Unlock()
 
-	agentID := generateAgentID(req.Hostname)
+	// Use provided agent ID if available, otherwise generate new one
+	var agentID string
+	if req.AgentId != "" {
+		agentID = req.AgentId
+	} else {
+		agentID = generateAgentID(req.Hostname)
+	}
 
 	// Create agent connection record without client initially
 	// The agent should provide its address or we need to discover it
