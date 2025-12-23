@@ -256,3 +256,47 @@ func (m *Manager) Cancel(opID string) error {
 	})
 	return nil
 }
+
+// Subscribe adds a listener for operation events
+func (m *Manager) Subscribe(opID string) <-chan Event {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ch := make(chan Event, 10) // Buffered channel to prevent blocking
+	m.listeners[opID] = append(m.listeners[opID], ch)
+
+	// Send current state as first event
+	if op, exists := m.operations[opID]; exists {
+		event := Event{
+			OperationID: opID,
+			State:       op.State,
+			Timestamp:   time.Now(),
+			Message:     "Subscribed to operation",
+			Progress:    op.Progress,
+		}
+		select {
+		case ch <- event:
+		default:
+		}
+	}
+
+	return ch
+}
+
+// Unsubscribe removes a listener for operation events
+func (m *Manager) Unsubscribe(opID string, ch <-chan Event) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if listeners, exists := m.listeners[opID]; exists {
+		for i, listener := range listeners {
+			if listener == ch {
+				// Remove the listener
+				m.listeners[opID] = append(listeners[:i], listeners[i+1:]...)
+				// Close the channel
+				close(listener)
+				break
+			}
+		}
+	}
+}

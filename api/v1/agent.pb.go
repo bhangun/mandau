@@ -3943,10 +3943,12 @@ const file_api_v1_agent_proto_rawDesc = "" +
 	"\x17OPERATION_STATE_RUNNING\x10\x01\x12\x1d\n" +
 	"\x19OPERATION_STATE_COMPLETED\x10\x02\x12\x1a\n" +
 	"\x16OPERATION_STATE_FAILED\x10\x03\x12\x1d\n" +
-	"\x19OPERATION_STATE_CANCELLED\x10\x042d\n" +
+	"\x19OPERATION_STATE_CANCELLED\x10\x042\x8e\x02\n" +
 	"\vCoreService\x12U\n" +
 	"\n" +
-	"ListAgents\x12\".mandau.agent.v1.ListAgentsRequest\x1a#.mandau.agent.v1.ListAgentsResponse2\xe1\x02\n" +
+	"ListAgents\x12\".mandau.agent.v1.ListAgentsRequest\x1a#.mandau.agent.v1.ListAgentsResponse\x12T\n" +
+	"\rRegisterAgent\x12 .mandau.agent.v1.RegisterRequest\x1a!.mandau.agent.v1.RegisterResponse\x12R\n" +
+	"\tHeartbeat\x12!.mandau.agent.v1.HeartbeatRequest\x1a\".mandau.agent.v1.HeartbeatResponse2\xe1\x02\n" +
 	"\fAgentService\x12O\n" +
 	"\bRegister\x12 .mandau.agent.v1.RegisterRequest\x1a!.mandau.agent.v1.RegisterResponse\x12R\n" +
 	"\tHeartbeat\x12!.mandau.agent.v1.HeartbeatRequest\x1a\".mandau.agent.v1.HeartbeatResponse\x12^\n" +
@@ -4122,63 +4124,67 @@ var file_api_v1_agent_proto_depIdxs = []int32{
 	13, // 39: mandau.agent.v1.ListContainersResponse.containers:type_name -> mandau.agent.v1.Container
 	13, // 40: mandau.agent.v1.InspectContainerResponse.container:type_name -> mandau.agent.v1.Container
 	3,  // 41: mandau.agent.v1.CoreService.ListAgents:input_type -> mandau.agent.v1.ListAgentsRequest
-	6,  // 42: mandau.agent.v1.AgentService.Register:input_type -> mandau.agent.v1.RegisterRequest
-	29, // 43: mandau.agent.v1.AgentService.Heartbeat:input_type -> mandau.agent.v1.HeartbeatRequest
-	31, // 44: mandau.agent.v1.AgentService.GetCapabilities:input_type -> mandau.agent.v1.CapabilitiesRequest
-	33, // 45: mandau.agent.v1.AgentService.GetHealth:input_type -> mandau.agent.v1.HealthRequest
-	35, // 46: mandau.agent.v1.StackService.ListStacks:input_type -> mandau.agent.v1.ListStacksRequest
-	37, // 47: mandau.agent.v1.StackService.GetStack:input_type -> mandau.agent.v1.GetStackRequest
-	9,  // 48: mandau.agent.v1.StackService.ApplyStack:input_type -> mandau.agent.v1.ApplyStackRequest
-	39, // 49: mandau.agent.v1.StackService.RemoveStack:input_type -> mandau.agent.v1.RemoveStackRequest
-	10, // 50: mandau.agent.v1.StackService.DiffStack:input_type -> mandau.agent.v1.DiffStackRequest
-	40, // 51: mandau.agent.v1.StackService.GetStackLogs:input_type -> mandau.agent.v1.GetStackLogsRequest
-	41, // 52: mandau.agent.v1.ContainerService.ListContainers:input_type -> mandau.agent.v1.ListContainersRequest
-	43, // 53: mandau.agent.v1.ContainerService.InspectContainer:input_type -> mandau.agent.v1.InspectContainerRequest
-	45, // 54: mandau.agent.v1.ContainerService.StreamLogs:input_type -> mandau.agent.v1.StreamLogsRequest
-	15, // 55: mandau.agent.v1.ContainerService.Exec:input_type -> mandau.agent.v1.ExecRequest
-	46, // 56: mandau.agent.v1.ContainerService.GetStats:input_type -> mandau.agent.v1.GetStatsRequest
-	47, // 57: mandau.agent.v1.ContainerService.StartContainer:input_type -> mandau.agent.v1.StartContainerRequest
-	49, // 58: mandau.agent.v1.ContainerService.StopContainer:input_type -> mandau.agent.v1.StopContainerRequest
-	51, // 59: mandau.agent.v1.ContainerService.RestartContainer:input_type -> mandau.agent.v1.RestartContainerRequest
-	21, // 60: mandau.agent.v1.FilesystemService.ListFiles:input_type -> mandau.agent.v1.ListFilesRequest
-	24, // 61: mandau.agent.v1.FilesystemService.ReadFile:input_type -> mandau.agent.v1.ReadFileRequest
-	26, // 62: mandau.agent.v1.FilesystemService.WriteFile:input_type -> mandau.agent.v1.WriteFileRequest
-	54, // 63: mandau.agent.v1.FilesystemService.DeleteFile:input_type -> mandau.agent.v1.DeleteFileRequest
-	56, // 64: mandau.agent.v1.FilesystemService.CreateDirectory:input_type -> mandau.agent.v1.CreateDirectoryRequest
-	58, // 65: mandau.agent.v1.OperationsService.GetOperation:input_type -> mandau.agent.v1.GetOperationRequest
-	59, // 66: mandau.agent.v1.OperationsService.ListOperations:input_type -> mandau.agent.v1.ListOperationsRequest
-	61, // 67: mandau.agent.v1.OperationsService.CancelOperation:input_type -> mandau.agent.v1.CancelOperationRequest
-	63, // 68: mandau.agent.v1.OperationsService.StreamOperation:input_type -> mandau.agent.v1.StreamOperationRequest
-	4,  // 69: mandau.agent.v1.CoreService.ListAgents:output_type -> mandau.agent.v1.ListAgentsResponse
-	7,  // 70: mandau.agent.v1.AgentService.Register:output_type -> mandau.agent.v1.RegisterResponse
-	30, // 71: mandau.agent.v1.AgentService.Heartbeat:output_type -> mandau.agent.v1.HeartbeatResponse
-	32, // 72: mandau.agent.v1.AgentService.GetCapabilities:output_type -> mandau.agent.v1.CapabilitiesResponse
-	34, // 73: mandau.agent.v1.AgentService.GetHealth:output_type -> mandau.agent.v1.HealthResponse
-	36, // 74: mandau.agent.v1.StackService.ListStacks:output_type -> mandau.agent.v1.ListStacksResponse
-	38, // 75: mandau.agent.v1.StackService.GetStack:output_type -> mandau.agent.v1.GetStackResponse
-	28, // 76: mandau.agent.v1.StackService.ApplyStack:output_type -> mandau.agent.v1.OperationEvent
-	28, // 77: mandau.agent.v1.StackService.RemoveStack:output_type -> mandau.agent.v1.OperationEvent
-	11, // 78: mandau.agent.v1.StackService.DiffStack:output_type -> mandau.agent.v1.DiffStackResponse
-	19, // 79: mandau.agent.v1.StackService.GetStackLogs:output_type -> mandau.agent.v1.LogEntry
-	42, // 80: mandau.agent.v1.ContainerService.ListContainers:output_type -> mandau.agent.v1.ListContainersResponse
-	44, // 81: mandau.agent.v1.ContainerService.InspectContainer:output_type -> mandau.agent.v1.InspectContainerResponse
-	19, // 82: mandau.agent.v1.ContainerService.StreamLogs:output_type -> mandau.agent.v1.LogEntry
-	18, // 83: mandau.agent.v1.ContainerService.Exec:output_type -> mandau.agent.v1.ExecResponse
-	20, // 84: mandau.agent.v1.ContainerService.GetStats:output_type -> mandau.agent.v1.ContainerStats
-	48, // 85: mandau.agent.v1.ContainerService.StartContainer:output_type -> mandau.agent.v1.StartContainerResponse
-	50, // 86: mandau.agent.v1.ContainerService.StopContainer:output_type -> mandau.agent.v1.StopContainerResponse
-	52, // 87: mandau.agent.v1.ContainerService.RestartContainer:output_type -> mandau.agent.v1.RestartContainerResponse
-	22, // 88: mandau.agent.v1.FilesystemService.ListFiles:output_type -> mandau.agent.v1.ListFilesResponse
-	25, // 89: mandau.agent.v1.FilesystemService.ReadFile:output_type -> mandau.agent.v1.ReadFileResponse
-	53, // 90: mandau.agent.v1.FilesystemService.WriteFile:output_type -> mandau.agent.v1.WriteFileResponse
-	55, // 91: mandau.agent.v1.FilesystemService.DeleteFile:output_type -> mandau.agent.v1.DeleteFileResponse
-	57, // 92: mandau.agent.v1.FilesystemService.CreateDirectory:output_type -> mandau.agent.v1.CreateDirectoryResponse
-	27, // 93: mandau.agent.v1.OperationsService.GetOperation:output_type -> mandau.agent.v1.Operation
-	60, // 94: mandau.agent.v1.OperationsService.ListOperations:output_type -> mandau.agent.v1.ListOperationsResponse
-	62, // 95: mandau.agent.v1.OperationsService.CancelOperation:output_type -> mandau.agent.v1.CancelOperationResponse
-	28, // 96: mandau.agent.v1.OperationsService.StreamOperation:output_type -> mandau.agent.v1.OperationEvent
-	69, // [69:97] is the sub-list for method output_type
-	41, // [41:69] is the sub-list for method input_type
+	6,  // 42: mandau.agent.v1.CoreService.RegisterAgent:input_type -> mandau.agent.v1.RegisterRequest
+	29, // 43: mandau.agent.v1.CoreService.Heartbeat:input_type -> mandau.agent.v1.HeartbeatRequest
+	6,  // 44: mandau.agent.v1.AgentService.Register:input_type -> mandau.agent.v1.RegisterRequest
+	29, // 45: mandau.agent.v1.AgentService.Heartbeat:input_type -> mandau.agent.v1.HeartbeatRequest
+	31, // 46: mandau.agent.v1.AgentService.GetCapabilities:input_type -> mandau.agent.v1.CapabilitiesRequest
+	33, // 47: mandau.agent.v1.AgentService.GetHealth:input_type -> mandau.agent.v1.HealthRequest
+	35, // 48: mandau.agent.v1.StackService.ListStacks:input_type -> mandau.agent.v1.ListStacksRequest
+	37, // 49: mandau.agent.v1.StackService.GetStack:input_type -> mandau.agent.v1.GetStackRequest
+	9,  // 50: mandau.agent.v1.StackService.ApplyStack:input_type -> mandau.agent.v1.ApplyStackRequest
+	39, // 51: mandau.agent.v1.StackService.RemoveStack:input_type -> mandau.agent.v1.RemoveStackRequest
+	10, // 52: mandau.agent.v1.StackService.DiffStack:input_type -> mandau.agent.v1.DiffStackRequest
+	40, // 53: mandau.agent.v1.StackService.GetStackLogs:input_type -> mandau.agent.v1.GetStackLogsRequest
+	41, // 54: mandau.agent.v1.ContainerService.ListContainers:input_type -> mandau.agent.v1.ListContainersRequest
+	43, // 55: mandau.agent.v1.ContainerService.InspectContainer:input_type -> mandau.agent.v1.InspectContainerRequest
+	45, // 56: mandau.agent.v1.ContainerService.StreamLogs:input_type -> mandau.agent.v1.StreamLogsRequest
+	15, // 57: mandau.agent.v1.ContainerService.Exec:input_type -> mandau.agent.v1.ExecRequest
+	46, // 58: mandau.agent.v1.ContainerService.GetStats:input_type -> mandau.agent.v1.GetStatsRequest
+	47, // 59: mandau.agent.v1.ContainerService.StartContainer:input_type -> mandau.agent.v1.StartContainerRequest
+	49, // 60: mandau.agent.v1.ContainerService.StopContainer:input_type -> mandau.agent.v1.StopContainerRequest
+	51, // 61: mandau.agent.v1.ContainerService.RestartContainer:input_type -> mandau.agent.v1.RestartContainerRequest
+	21, // 62: mandau.agent.v1.FilesystemService.ListFiles:input_type -> mandau.agent.v1.ListFilesRequest
+	24, // 63: mandau.agent.v1.FilesystemService.ReadFile:input_type -> mandau.agent.v1.ReadFileRequest
+	26, // 64: mandau.agent.v1.FilesystemService.WriteFile:input_type -> mandau.agent.v1.WriteFileRequest
+	54, // 65: mandau.agent.v1.FilesystemService.DeleteFile:input_type -> mandau.agent.v1.DeleteFileRequest
+	56, // 66: mandau.agent.v1.FilesystemService.CreateDirectory:input_type -> mandau.agent.v1.CreateDirectoryRequest
+	58, // 67: mandau.agent.v1.OperationsService.GetOperation:input_type -> mandau.agent.v1.GetOperationRequest
+	59, // 68: mandau.agent.v1.OperationsService.ListOperations:input_type -> mandau.agent.v1.ListOperationsRequest
+	61, // 69: mandau.agent.v1.OperationsService.CancelOperation:input_type -> mandau.agent.v1.CancelOperationRequest
+	63, // 70: mandau.agent.v1.OperationsService.StreamOperation:input_type -> mandau.agent.v1.StreamOperationRequest
+	4,  // 71: mandau.agent.v1.CoreService.ListAgents:output_type -> mandau.agent.v1.ListAgentsResponse
+	7,  // 72: mandau.agent.v1.CoreService.RegisterAgent:output_type -> mandau.agent.v1.RegisterResponse
+	30, // 73: mandau.agent.v1.CoreService.Heartbeat:output_type -> mandau.agent.v1.HeartbeatResponse
+	7,  // 74: mandau.agent.v1.AgentService.Register:output_type -> mandau.agent.v1.RegisterResponse
+	30, // 75: mandau.agent.v1.AgentService.Heartbeat:output_type -> mandau.agent.v1.HeartbeatResponse
+	32, // 76: mandau.agent.v1.AgentService.GetCapabilities:output_type -> mandau.agent.v1.CapabilitiesResponse
+	34, // 77: mandau.agent.v1.AgentService.GetHealth:output_type -> mandau.agent.v1.HealthResponse
+	36, // 78: mandau.agent.v1.StackService.ListStacks:output_type -> mandau.agent.v1.ListStacksResponse
+	38, // 79: mandau.agent.v1.StackService.GetStack:output_type -> mandau.agent.v1.GetStackResponse
+	28, // 80: mandau.agent.v1.StackService.ApplyStack:output_type -> mandau.agent.v1.OperationEvent
+	28, // 81: mandau.agent.v1.StackService.RemoveStack:output_type -> mandau.agent.v1.OperationEvent
+	11, // 82: mandau.agent.v1.StackService.DiffStack:output_type -> mandau.agent.v1.DiffStackResponse
+	19, // 83: mandau.agent.v1.StackService.GetStackLogs:output_type -> mandau.agent.v1.LogEntry
+	42, // 84: mandau.agent.v1.ContainerService.ListContainers:output_type -> mandau.agent.v1.ListContainersResponse
+	44, // 85: mandau.agent.v1.ContainerService.InspectContainer:output_type -> mandau.agent.v1.InspectContainerResponse
+	19, // 86: mandau.agent.v1.ContainerService.StreamLogs:output_type -> mandau.agent.v1.LogEntry
+	18, // 87: mandau.agent.v1.ContainerService.Exec:output_type -> mandau.agent.v1.ExecResponse
+	20, // 88: mandau.agent.v1.ContainerService.GetStats:output_type -> mandau.agent.v1.ContainerStats
+	48, // 89: mandau.agent.v1.ContainerService.StartContainer:output_type -> mandau.agent.v1.StartContainerResponse
+	50, // 90: mandau.agent.v1.ContainerService.StopContainer:output_type -> mandau.agent.v1.StopContainerResponse
+	52, // 91: mandau.agent.v1.ContainerService.RestartContainer:output_type -> mandau.agent.v1.RestartContainerResponse
+	22, // 92: mandau.agent.v1.FilesystemService.ListFiles:output_type -> mandau.agent.v1.ListFilesResponse
+	25, // 93: mandau.agent.v1.FilesystemService.ReadFile:output_type -> mandau.agent.v1.ReadFileResponse
+	53, // 94: mandau.agent.v1.FilesystemService.WriteFile:output_type -> mandau.agent.v1.WriteFileResponse
+	55, // 95: mandau.agent.v1.FilesystemService.DeleteFile:output_type -> mandau.agent.v1.DeleteFileResponse
+	57, // 96: mandau.agent.v1.FilesystemService.CreateDirectory:output_type -> mandau.agent.v1.CreateDirectoryResponse
+	27, // 97: mandau.agent.v1.OperationsService.GetOperation:output_type -> mandau.agent.v1.Operation
+	60, // 98: mandau.agent.v1.OperationsService.ListOperations:output_type -> mandau.agent.v1.ListOperationsResponse
+	62, // 99: mandau.agent.v1.OperationsService.CancelOperation:output_type -> mandau.agent.v1.CancelOperationResponse
+	28, // 100: mandau.agent.v1.OperationsService.StreamOperation:output_type -> mandau.agent.v1.OperationEvent
+	71, // [71:101] is the sub-list for method output_type
+	41, // [41:71] is the sub-list for method input_type
 	41, // [41:41] is the sub-list for extension type_name
 	41, // [41:41] is the sub-list for extension extendee
 	0,  // [0:41] is the sub-list for field type_name

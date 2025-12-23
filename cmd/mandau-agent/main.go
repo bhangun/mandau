@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Agent struct {
@@ -266,14 +267,19 @@ func (a *Agent) startHeartbeat() {
 	ticker := time.NewTicker(30 * time.Second) // Heartbeat every 30 seconds
 	defer ticker.Stop()
 
+	// Create a context that will be cancelled when the agent shuts down
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for {
 		select {
 		case <-ticker.C:
 			if err := a.sendHeartbeat(); err != nil {
 				fmt.Printf("Heartbeat failed: %v\n", err)
 			}
-		case <-a.serverConn.GetState().String(): // This is a placeholder; in practice you'd use a proper context cancellation
+		case <-ctx.Done():
 			// Agent is shutting down
+			fmt.Println("Heartbeat routine stopped")
 			return
 		}
 	}
@@ -288,7 +294,7 @@ func (a *Agent) sendHeartbeat() error {
 
 	_, err := client.Heartbeat(ctx, &agentv1.HeartbeatRequest{
 		AgentId: a.config.AgentID,
-		Status:  "healthy",
+		Status:  map[string]string{"status": "healthy"},
 	})
 	if err != nil {
 		return fmt.Errorf("send heartbeat: %w", err)
@@ -378,6 +384,11 @@ func (a *Agent) Shutdown() {
 	// Shutdown plugins
 	if err := a.plugins.ShutdownAll(ctx); err != nil {
 		fmt.Printf("Plugin shutdown error: %v\n", err)
+	}
+
+	// Close server connection
+	if a.serverConn != nil {
+		a.serverConn.Close()
 	}
 
 	// Close docker client
@@ -661,11 +672,280 @@ func (a *Agent) GetHealth(ctx context.Context, req *agentv1.HealthRequest) (*age
 	}, nil
 }
 
+// =============================================================================
+// STACK SERVICE IMPLEMENTATIONS
+// =============================================================================
+
+func (a *Agent) ListStacks(ctx context.Context, req *agentv1.ListStacksRequest) (*agentv1.ListStacksResponse, error) {
+	stacks, err := a.stackMgr.ListStacks(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list stacks: %v", err)
+	}
+
+	result := make([]*agentv1.Stack, len(stacks))
+	for i, stack := range stacks {
+		result[i] = &agentv1.Stack{
+			Id:         stack.ID,
+			Name:       stack.Name,
+			Path:       stack.Path,
+			State:      convertStackState(stack.State),
+			Containers: convertContainers(stack.Containers),
+			CreatedAt:  convertTimeToProto(stack.CreatedAt),
+			UpdatedAt:  convertTimeToProto(stack.UpdatedAt),
+			Labels:     stack.Labels,
+		}
+	}
+
+	return &agentv1.ListStacksResponse{
+		Stacks: result,
+	}, nil
+}
+
+func (a *Agent) GetStack(ctx context.Context, req *agentv1.GetStackRequest) (*agentv1.GetStackResponse, error) {
+	stack, err := a.stackMgr.GetStack(ctx, req.StackId)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "get stack: %v", err)
+	}
+
+	return &agentv1.GetStackResponse{
+		Stack: &agentv1.Stack{
+			Id:         stack.ID,
+			Name:       stack.Name,
+			Path:       stack.Path,
+			State:      convertStackState(stack.State),
+			Containers: convertContainers(stack.Containers),
+			CreatedAt:  convertTimeToProto(stack.CreatedAt),
+			UpdatedAt:  convertTimeToProto(stack.UpdatedAt),
+			Labels:     stack.Labels,
+		},
+	}, nil
+}
+
+func (a *Agent) ApplyStack(req *agentv1.ApplyStackRequest, stream agentv1.StackService_ApplyStackServer) error {
+	ctx := stream.Context()
+
+	// Convert proto request to internal request
+	internalReq := &stack.ApplyStackRequest{
+		StackName:      req.StackName,
+		ComposeContent: req.ComposeContent,
+		EnvVars:        req.EnvVars,
+		ForceRecreate:  req.ForceRecreate,
+		Services:       req.Services,
+		PullImages:     req.PullImages,
+	}
+
+	opID, err := a.stackMgr.ApplyStack(ctx, internalReq)
+	if err != nil {
+		return status.Errorf(codes.Internal, "apply stack: %v", err)
+	}
+
+	// Stream operation events
+	events := a.opMgr.Subscribe(opID)
+	defer a.opMgr.Unsubscribe(opID, events)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case event, ok := <-events:
+			if !ok {
+				return nil
+			}
+
+			errorMsg := ""
+			if event.Error != nil {
+				errorMsg = event.Error.Error()
+			}
+
+			resp := &agentv1.OperationEvent{
+				OperationId: event.OperationID,
+				State:       convertOperationState(event.State),
+				Timestamp:   timestamppb.Now(),
+				Message:     event.Message,
+				Progress:    int32(event.Progress),
+				Error:       errorMsg,
+			}
+
+			if err := stream.Send(resp); err != nil {
+				return err
+			}
+
+			// If operation is completed, exit
+			if event.State == operation.OperationStateCompleted || event.State == operation.OperationStateFailed {
+				return nil
+			}
+		}
+	}
+}
+
+func (a *Agent) RemoveStack(req *agentv1.RemoveStackRequest, stream agentv1.StackService_RemoveStackServer) error {
+	ctx := stream.Context()
+
+	// Extract stack name from stack ID (in our case, stack ID is the name)
+	stackName := req.StackId
+
+	opID, err := a.stackMgr.RemoveStack(ctx, stackName, false) // Don't remove volumes by default
+	if err != nil {
+		return status.Errorf(codes.Internal, "remove stack: %v", err)
+	}
+
+	// Stream operation events
+	events := a.opMgr.Subscribe(opID)
+	defer a.opMgr.Unsubscribe(opID, events)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case event, ok := <-events:
+			if !ok {
+				return nil
+			}
+
+			errorMsg := ""
+			if event.Error != nil {
+				errorMsg = event.Error.Error()
+			}
+
+			resp := &agentv1.OperationEvent{
+				OperationId: event.OperationID,
+				State:       convertOperationState(event.State),
+				Timestamp:   timestamppb.Now(),
+				Message:     event.Message,
+				Progress:    int32(event.Progress),
+				Error:       errorMsg,
+			}
+
+			if err := stream.Send(resp); err != nil {
+				return err
+			}
+
+			// If operation is completed, exit
+			if event.State == operation.OperationStateCompleted || event.State == operation.OperationStateFailed {
+				return nil
+			}
+		}
+	}
+}
+
+func (a *Agent) DiffStack(ctx context.Context, req *agentv1.DiffStackRequest) (*agentv1.DiffStackResponse, error) {
+	result, err := a.stackMgr.DiffStack(ctx, req.StackName, req.NewComposeContent)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "diff stack: %v", err)
+	}
+
+	// Convert internal diff result to proto
+	protoServices := make([]*agentv1.ServiceDiff, len(result.Services))
+	for i, svcDiff := range result.Services {
+		protoServices[i] = &agentv1.ServiceDiff{
+			Name:    svcDiff.Name,
+			Action:  convertDiffAction(svcDiff.Action),
+			Changes: svcDiff.Changes,
+		}
+	}
+
+	return &agentv1.DiffStackResponse{
+		Services:   protoServices,
+		HasChanges: result.HasChanges,
+	}, nil
+}
+
+func (a *Agent) GetStackLogs(req *agentv1.GetStackLogsRequest, stream agentv1.StackService_GetStackLogsServer) error {
+	ctx := stream.Context()
+
+	// Get containers for the stack to stream logs from
+	stack, err := a.stackMgr.GetStack(ctx, req.StackName)
+	if err != nil {
+		return status.Errorf(codes.NotFound, "get stack: %v", err)
+	}
+
+	// Stream logs from each container in the stack
+	for _, container := range stack.Containers {
+		// For now, we'll send a simple log entry - in production this would connect to the actual container logs
+		logEntry := &agentv1.LogEntry{
+			Timestamp:   timestamppb.Now(),
+			Stream:      "stdout",
+			Content:     []byte(fmt.Sprintf("Logs for container %s in stack %s", container.Name, req.StackName)),
+			ContainerId: container.ID,
+			ServiceName: container.Service,
+		}
+
+		if err := stream.Send(logEntry); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func healthStatus(err error) string {
 	if err != nil {
 		return "unhealthy"
 	}
 	return "healthy"
+}
+
+// Helper functions for converting between internal and proto types
+func convertStackState(state stack.StackState) agentv1.StackState {
+	switch state {
+	case stack.StateRunning:
+		return agentv1.StackState_STACK_STATE_RUNNING
+	case stack.StateStopped:
+		return agentv1.StackState_STACK_STATE_STOPPED
+	case stack.StateError:
+		return agentv1.StackState_STACK_STATE_ERROR
+	case stack.StatePartial:
+		return agentv1.StackState_STACK_STATE_PARTIAL
+	default:
+		return agentv1.StackState_STACK_STATE_UNKNOWN
+	}
+}
+
+func convertContainers(containers []stack.ContainerInfo) []*agentv1.Container {
+	result := make([]*agentv1.Container, len(containers))
+	for i, container := range containers {
+		result[i] = &agentv1.Container{
+			Id:     container.ID,
+			Name:   container.Name,
+			Image:  container.Image,
+			State:  container.State,
+			Status: container.Status,
+			Labels: map[string]string{}, // Add labels if available
+		}
+	}
+	return result
+}
+
+func convertTimeToProto(t time.Time) *timestamppb.Timestamp {
+	return timestamppb.New(t)
+}
+
+func convertOperationState(state operation.OperationState) agentv1.OperationState {
+	switch state {
+	case operation.OperationStateRunning:
+		return agentv1.OperationState_OPERATION_STATE_RUNNING
+	case operation.OperationStateCompleted:
+		return agentv1.OperationState_OPERATION_STATE_COMPLETED
+	case operation.OperationStateFailed:
+		return agentv1.OperationState_OPERATION_STATE_FAILED
+	case operation.OperationStateCancelled:
+		return agentv1.OperationState_OPERATION_STATE_CANCELLED
+	default:
+		return agentv1.OperationState_OPERATION_STATE_PENDING
+	}
+}
+
+func convertDiffAction(action stack.DiffAction) agentv1.DiffAction {
+	switch action {
+	case stack.DiffActionCreate:
+		return agentv1.DiffAction_DIFF_ACTION_CREATE
+	case stack.DiffActionUpdate:
+		return agentv1.DiffAction_DIFF_ACTION_UPDATE
+	case stack.DiffActionDelete:
+		return agentv1.DiffAction_DIFF_ACTION_DELETE
+	default:
+		return agentv1.DiffAction_DIFF_ACTION_NONE
+	}
 }
 
 func loadPluginsFromDir(registry *plugin.Registry, dir string) error {

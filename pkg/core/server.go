@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 // Core is the central control plane that manages multiple agents
 type Core struct {
 	agentv1.UnimplementedCoreServiceServer
+	agentv1.UnimplementedStackServiceServer
 	config  *CoreConfig
 	agents  *AgentRegistry
 	plugins *plugin.Registry
@@ -49,9 +51,10 @@ type AgentConnection struct {
 	Address      string
 	Labels       map[string]string
 	Capabilities []string
-	Client       grpc.ClientConnInterface
+	Client       *grpc.ClientConn  // Changed from grpc.ClientConnInterface to *grpc.ClientConn
 	LastSeen     time.Time
 	Status       AgentStatus
+	Stacks       []string // List of stack IDs/names on this agent
 }
 
 type AgentStatus string
@@ -145,6 +148,7 @@ func (c *Core) Serve() error {
 
 	// Register Core API services
 	agentv1.RegisterCoreServiceServer(server, c)
+	agentv1.RegisterStackServiceServer(server, c)
 
 	lis, err := net.Listen("tcp", c.config.ListenAddr)
 	if err != nil {
@@ -177,17 +181,20 @@ func (c *Core) RegisterAgent(ctx context.Context, req *agentv1.RegisterRequest) 
 
 	agentID := generateAgentID(req.Hostname)
 
-	// Create agent connection
-	conn := &AgentConnection{
+	// Create agent connection record without client initially
+	// The agent should provide its address or we need to discover it
+	// For now, we'll create a placeholder and try to connect later
+	agentConn := &AgentConnection{
 		ID:           agentID,
 		Hostname:     req.Hostname,
 		Labels:       req.Labels,
 		Capabilities: req.Capabilities,
 		LastSeen:     time.Now(),
 		Status:       AgentStatusOnline,
+		Stacks:       []string{}, // Initialize empty stack list
 	}
 
-	c.agents.agents[agentID] = conn
+	c.agents.agents[agentID] = agentConn
 
 	c.audit.LogAgentRegistration(ctx, agentID, req.Hostname)
 
@@ -220,6 +227,26 @@ func (c *Core) ListAgents(ctx context.Context, req *agentv1.ListAgentsRequest) (
 	}, nil
 }
 
+func (c *Core) Heartbeat(ctx context.Context, req *agentv1.HeartbeatRequest) (*agentv1.HeartbeatResponse, error) {
+	c.agents.mu.Lock()
+	defer c.agents.mu.Unlock()
+
+	agentID := req.AgentId
+
+	agent, exists := c.agents.agents[agentID]
+	if !exists {
+		return nil, fmt.Errorf("agent not found: %s", agentID)
+	}
+
+	// Update last seen time and status
+	agent.LastSeen = time.Now()
+	agent.Status = AgentStatusOnline
+
+	return &agentv1.HeartbeatResponse{
+		Status: "healthy",
+	}, nil
+}
+
 // ProxyStackOperation forwards stack operations to the target agent
 func (c *Core) ProxyStackOperation(ctx context.Context, agentID string, req *agentv1.ApplyStackRequest) (string, error) {
 	conn, err := c.getAgentConnection(agentID)
@@ -246,19 +273,77 @@ func (c *Core) ProxyStackOperation(ctx context.Context, agentID string, req *age
 }
 
 func (c *Core) getAgentConnection(agentID string) (*AgentConnection, error) {
-	c.agents.mu.RLock()
-	defer c.agents.mu.RUnlock()
+	c.agents.mu.Lock() // Need to write lock since we might update the connection
+	defer c.agents.mu.Unlock()
 
-	conn, exists := c.agents.agents[agentID]
+	agentConn, exists := c.agents.agents[agentID]
 	if !exists {
 		return nil, fmt.Errorf("agent not found: %s", agentID)
 	}
 
-	if conn.Status != AgentStatusOnline {
+	if agentConn.Status != AgentStatusOnline {
 		return nil, fmt.Errorf("agent offline: %s", agentID)
 	}
 
-	return conn, nil
+	// If we don't have a client connection yet, try to establish one
+	if agentConn.Client == nil {
+		// Construct agent address - in a real system, this would come from the agent during registration
+		// Extract just the hostname part from the agent ID (format: agent-<hostname>-<timestamp>)
+		hostname := agentConn.Hostname
+		if hostname == "" {
+			// If hostname is empty, try to extract from agent ID
+			// Format is typically "agent-<hostname>-<timestamp>" or similar
+			parts := strings.Split(agentID, "-")
+			if len(parts) > 1 {
+				// Take all parts except the first ("agent") and last (timestamp) as hostname
+				if len(parts) > 2 {
+					hostname = strings.Join(parts[1:len(parts)-1], "-")
+				} else {
+					hostname = parts[1]
+				}
+			}
+		}
+
+		agentAddr := fmt.Sprintf("%s:8444", hostname) // Default agent port
+
+		// Load certificates for connecting to agent (mTLS)
+		cert, err := tls.LoadX509KeyPair(c.config.CertPath, c.config.KeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("load core cert for agent connection: %w", err)
+		}
+
+		// Load CA certificate to verify agent certificates
+		caCert, err := ioutil.ReadFile(c.config.CAPath)
+		if err != nil {
+			return nil, fmt.Errorf("load CA cert for agent connection: %w", err)
+		}
+
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("parse CA cert for agent connection")
+		}
+
+		// Use mTLS for connection to agent
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      caCertPool,
+			ServerName:   "mandau-agent", // Verify agent certificate against this name
+			MinVersion:   tls.VersionTLS13,
+		}
+
+		creds := credentials.NewTLS(tlsConfig)
+
+		// Create gRPC connection to agent
+		conn, err := grpc.Dial(agentAddr, grpc.WithTransportCredentials(creds))
+		if err != nil {
+			return nil, fmt.Errorf("dial agent %s at %s: %w", agentID, agentAddr, err)
+		}
+
+		agentConn.Client = conn
+		agentConn.Address = agentAddr
+	}
+
+	return agentConn, nil
 }
 
 // monitorAgents checks agent health periodically
@@ -355,4 +440,189 @@ func resultString(err error) string {
 		return "error"
 	}
 	return "success"
+}
+
+// =============================================================================
+// STACK SERVICE IMPLEMENTATIONS (PROXY TO AGENTS)
+// =============================================================================
+
+func (c *Core) ListStacks(ctx context.Context, req *agentv1.ListStacksRequest) (*agentv1.ListStacksResponse, error) {
+	agentID := req.AgentId
+
+	conn, err := c.getAgentConnection(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("get agent connection: %w", err)
+	}
+
+	// Create stack service client for this agent
+	stackClient := agentv1.NewStackServiceClient(conn.Client)
+
+	// Forward the request to the agent
+	resp, err := stackClient.ListStacks(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("forward to agent: %w", err)
+	}
+
+	// Update the agent's stack list in our registry
+	stackIDs := make([]string, len(resp.Stacks))
+	for i, stack := range resp.Stacks {
+		stackIDs[i] = stack.Id
+	}
+	c.updateAgentStacks(agentID, stackIDs)
+
+	return resp, nil
+}
+
+func (c *Core) GetStack(ctx context.Context, req *agentv1.GetStackRequest) (*agentv1.GetStackResponse, error) {
+	// Find which agent has this stack
+	agentID, err := c.findAgentWithStack(req.StackId)
+	if err != nil {
+		return nil, fmt.Errorf("find agent with stack: %w", err)
+	}
+
+	conn, err := c.getAgentConnection(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("get agent connection: %w", err)
+	}
+
+	// Create stack service client for this agent
+	stackClient := agentv1.NewStackServiceClient(conn.Client)
+
+	// Forward the request to the agent
+	resp, err := stackClient.GetStack(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("forward to agent: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (c *Core) ApplyStack(req *agentv1.ApplyStackRequest, stream agentv1.StackService_ApplyStackServer) error {
+	agentID := req.AgentId
+
+	conn, err := c.getAgentConnection(agentID)
+	if err != nil {
+		return fmt.Errorf("get agent connection: %w", err)
+	}
+
+	// Create stack service client for this agent
+	stackClient := agentv1.NewStackServiceClient(conn.Client)
+
+	// Forward the request to the agent
+	agentStream, err := stackClient.ApplyStack(stream.Context(), req)
+	if err != nil {
+		return fmt.Errorf("forward to agent: %w", err)
+	}
+
+	// Stream responses back to client
+	for {
+		event, err := agentStream.Recv()
+		if err != nil {
+			return err
+		}
+
+		if err := stream.Send(event); err != nil {
+			return err
+		}
+	}
+}
+
+func (c *Core) RemoveStack(req *agentv1.RemoveStackRequest, stream agentv1.StackService_RemoveStackServer) error {
+	// Find which agent has this stack
+	agentID, err := c.findAgentWithStack(req.StackId)
+	if err != nil {
+		return fmt.Errorf("find agent with stack: %w", err)
+	}
+
+	conn, err := c.getAgentConnection(agentID)
+	if err != nil {
+		return fmt.Errorf("get agent connection: %w", err)
+	}
+
+	// Create stack service client for this agent
+	stackClient := agentv1.NewStackServiceClient(conn.Client)
+
+	// Forward the request to the agent
+	agentStream, err := stackClient.RemoveStack(stream.Context(), req)
+	if err != nil {
+		return fmt.Errorf("forward to agent: %w", err)
+	}
+
+	// Stream responses back to client
+	for {
+		event, err := agentStream.Recv()
+		if err != nil {
+			return err
+		}
+
+		if err := stream.Send(event); err != nil {
+			return err
+		}
+	}
+}
+
+func (c *Core) DiffStack(ctx context.Context, req *agentv1.DiffStackRequest) (*agentv1.DiffStackResponse, error) {
+	// Since DiffStack doesn't have an agent ID in the request, we need to determine it
+	// For now, we'll return an error indicating this limitation
+	return nil, fmt.Errorf("DiffStack not implemented in core proxy - agent ID required in request")
+}
+
+// findAgentWithStack finds which agent has a specific stack
+func (c *Core) findAgentWithStack(stackID string) (string, error) {
+	c.agents.mu.RLock()
+	defer c.agents.mu.RUnlock()
+
+	for agentID, agent := range c.agents.agents {
+		for _, stack := range agent.Stacks {
+			if stack == stackID {
+				return agentID, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("stack not found on any agent: %s", stackID)
+}
+
+// updateAgentStacks updates the list of stacks for an agent
+func (c *Core) updateAgentStacks(agentID string, stacks []string) error {
+	c.agents.mu.Lock()
+	defer c.agents.mu.Unlock()
+
+	agent, exists := c.agents.agents[agentID]
+	if !exists {
+		return fmt.Errorf("agent not found: %s", agentID)
+	}
+
+	agent.Stacks = stacks
+	return nil
+}
+
+func (c *Core) GetStackLogs(req *agentv1.GetStackLogsRequest, stream agentv1.StackService_GetStackLogsServer) error {
+	agentID := req.AgentId
+
+	conn, err := c.getAgentConnection(agentID)
+	if err != nil {
+		return fmt.Errorf("get agent connection: %w", err)
+	}
+
+	// Create stack service client for this agent
+	stackClient := agentv1.NewStackServiceClient(conn.Client)
+
+	// Forward the request to the agent
+	agentStream, err := stackClient.GetStackLogs(stream.Context(), req)
+	if err != nil {
+		return fmt.Errorf("forward to agent: %w", err)
+	}
+
+	// Stream responses back to client
+	for {
+		logEntry, err := agentStream.Recv()
+		if err != nil {
+			return err
+		}
+
+		if err := stream.Send(logEntry); err != nil {
+			return err
+		}
+	}
 }

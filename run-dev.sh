@@ -133,7 +133,7 @@ if [ "$1" = "--host" ]; then
 
     # Run agent in foreground
     print_info "Starting Mandau Agent..."
-    ./bin/mandau-agent --cert certs/agent.crt --key certs/agent.key --ca certs/ca.crt --stack-root ./stacks
+    ./bin/mandau-agent --server localhost:8443 --cert certs/agent.crt --key certs/agent.key --ca certs/ca.crt --stack-root ./stacks
 
     # When agent exits, kill core
     # This will be handled by the trap function
@@ -206,7 +206,7 @@ elif [ "$1" = "--host-with-port" ]; then
 
     # Run agent in foreground
     print_info "Starting Mandau Agent..."
-    ./bin/mandau-agent --cert certs/agent.crt --key certs/agent.key --ca certs/ca.crt --stack-root ./stacks
+    ./bin/mandau-agent --server localhost:$CUSTOM_PORT --cert certs/agent.crt --key certs/agent.key --ca certs/ca.crt --stack-root ./stacks
 
     # When agent exits, kill core
     # This will be handled by the trap function

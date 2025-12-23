@@ -8,6 +8,8 @@ import "google/protobuf/duration.proto";
 // Core Service - Central control plane
 service CoreService {
   rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+  rpc RegisterAgent(RegisterRequest) returns (RegisterResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
   // Additional core services can be added here
 }
 

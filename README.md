@@ -448,16 +448,31 @@ Mandau uses GitHub Actions for automated testing, building, and releasing:
 
 To create a new release:
 
-1. Create and push a new tag:
+1. **Create and push a new tag**:
    ```bash
    git tag v1.0.0
    git push origin v1.0.0
    ```
 
-2. GitHub Actions will automatically:
-   - Build static binaries for Linux, macOS, and Windows
+2. **GitHub Actions will automatically**:
+   - Build static binaries for Linux, macOS, and Windows (AMD64/ARM64)
    - Create a GitHub release with the binaries
    - Build and push Docker images to ghcr.io
+
+3. **Available binaries will include**:
+   - `mandau-linux-amd64-v1.0.0.tar.gz`
+   - `mandau-linux-arm64-v1.0.0.tar.gz`
+   - `mandau-darwin-amd64-v1.0.0.tar.gz`
+   - `mandau-darwin-arm64-v1.0.0.tar.gz`
+   - `mandau-windows-amd64-v1.0.0.zip`
+
+### Manual Release Trigger
+
+If you want to create a draft release manually:
+1. Go to the "Releases" tab in the GitHub repository
+2. Click "Draft a new release"
+3. Create a new tag (e.g., `v1.0.0`)
+4. The draft-release workflow will generate changelog and create a draft
 
 ## 📄 License
 
