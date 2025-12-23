@@ -1,0 +1,25 @@
+[Unit]
+Description=Mandau Core Service
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/home/%i/mandau
+ExecStart=/home/%i/mandau/bin/mandau-core --cert /home/%i/mandau/certs/core.crt --key /home/%i/mandau/certs/core.key --ca /home/%i/mandau/certs/ca.crt --listen :8443
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/%i/mandau /tmp
+
+[Install]
+WantedBy=multi-user.target

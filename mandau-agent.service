@@ -1,0 +1,25 @@
+[Unit]
+Description=Mandau Agent Service
+After=network.target mandau-core.service
+Wants=mandau-core.service
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/home/%i/mandau
+ExecStart=/home/%i/mandau/bin/mandau-agent --server localhost:8443 --cert /home/%i/mandau/certs/agent.crt --key /home/%i/mandau/certs/agent.key --ca /home/%i/mandau/certs/ca.crt --stack-root /home/%i/mandau/stacks
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/%i/mandau /tmp
+
+[Install]
+WantedBy=multi-user.target

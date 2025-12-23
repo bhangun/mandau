@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,8 +24,10 @@ import (
 	"github.com/bhangun/mandau/plugins/auth/rbac"
 	"github.com/moby/moby/client"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -243,7 +246,7 @@ users:
 	return agent, nil
 }
 
-// createServerConnection creates a secure gRPC connection to the core server
+// createServerConnection creates a secure gRPC connection to the core server with retry logic
 func createServerConnection(cfg *Config) (*grpc.ClientConn, error) {
 	// Load certificates
 	cert, err := tls.LoadX509KeyPair(cfg.CertPath, cfg.KeyPath)
@@ -272,7 +275,25 @@ func createServerConnection(cfg *Config) (*grpc.ClientConn, error) {
 
 	creds := credentials.NewTLS(tlsConfig)
 
-	conn, err := grpc.Dial(cfg.ServerAddr, grpc.WithTransportCredentials(creds))
+	// Create connection with retry options
+	conn, err := grpc.Dial(cfg.ServerAddr,
+		grpc.WithTransportCredentials(creds),
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff: backoff.Config{
+				BaseDelay:  1.0 * time.Second,
+				Multiplier: 1.6,
+				Jitter:     0.2,
+				MaxDelay:   10.0 * time.Second,
+			},
+			MinConnectTimeout: 5 * time.Second,
+		}),
+		// Add keepalive to detect broken connections
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                10 * time.Second,
+			Timeout:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("dial server: %w", err)
 	}
@@ -300,7 +321,7 @@ func (a *Agent) registerWithServer() error {
 	return nil
 }
 
-// startHeartbeat starts the periodic heartbeat to the core server
+// startHeartbeat starts the periodic heartbeat to the core server with reconnection logic
 func (a *Agent) startHeartbeat() {
 	ticker := time.NewTicker(30 * time.Second) // Heartbeat every 30 seconds
 	defer ticker.Stop()
@@ -314,6 +335,15 @@ func (a *Agent) startHeartbeat() {
 		case <-ticker.C:
 			if err := a.sendHeartbeat(); err != nil {
 				fmt.Printf("Heartbeat failed: %v\n", err)
+				// Try to reconnect if heartbeat fails
+				if a.shouldReconnect(err) {
+					fmt.Println("Attempting to reconnect to core server...")
+					if err := a.reconnectToServer(); err != nil {
+						fmt.Printf("Reconnection failed: %v\n", err)
+					} else {
+						fmt.Println("Reconnected to core server successfully")
+					}
+				}
 			}
 		case <-ctx.Done():
 			// Agent is shutting down
@@ -321,6 +351,40 @@ func (a *Agent) startHeartbeat() {
 			return
 		}
 	}
+}
+
+// shouldReconnect determines if the agent should attempt to reconnect based on the error
+func (a *Agent) shouldReconnect(err error) bool {
+	// Check if the error indicates a connection issue
+	return status.Code(err) == codes.Unavailable ||
+		   status.Code(err) == codes.DeadlineExceeded ||
+		   strings.Contains(err.Error(), "connection refused") ||
+		   strings.Contains(err.Error(), "connection reset") ||
+		   strings.Contains(err.Error(), "broken pipe")
+}
+
+// reconnectToServer attempts to reconnect to the core server
+func (a *Agent) reconnectToServer() error {
+	// Close existing connection if it exists
+	if a.serverConn != nil {
+		a.serverConn.Close()
+	}
+
+	// Create new connection
+	newConn, err := createServerConnection(a.config)
+	if err != nil {
+		return fmt.Errorf("create new server connection: %w", err)
+	}
+
+	// Update the connection
+	a.serverConn = newConn
+
+	// Re-register with server
+	if err := a.registerWithServer(); err != nil {
+		return fmt.Errorf("re-register with server: %w", err)
+	}
+
+	return nil
 }
 
 // sendHeartbeat sends a heartbeat to the core server

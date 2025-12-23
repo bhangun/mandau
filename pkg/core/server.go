@@ -16,7 +16,9 @@ import (
 	"github.com/bhangun/mandau/pkg/plugin"
 	"github.com/bhangun/mandau/plugins/auth/rbac"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -296,6 +298,11 @@ func (c *Core) Heartbeat(ctx context.Context, req *agentv1.HeartbeatRequest) (*a
 
 	// Update last seen time and status
 	agent.LastSeen = time.Now()
+
+	// Only update status to online if it was offline, to avoid unnecessary log messages
+	if agent.Status == AgentStatusOffline {
+		fmt.Printf("Agent %s is back online via heartbeat\n", agentID)
+	}
 	agent.Status = AgentStatusOnline
 
 	return &agentv1.HeartbeatResponse{
@@ -337,8 +344,16 @@ func (c *Core) getAgentConnection(agentID string) (*AgentConnection, error) {
 		return nil, fmt.Errorf("agent not found: %s", agentID)
 	}
 
-	if agentConn.Status != AgentStatusOnline {
-		return nil, fmt.Errorf("agent offline: %s", agentID)
+	// If agent is offline, try to update its status by checking if it's recently sent a heartbeat
+	if agentConn.Status == AgentStatusOffline {
+		// If agent has sent a heartbeat in the last 30 seconds, consider it online again
+		if time.Since(agentConn.LastSeen) <= 30*time.Second {
+			agentConn.Status = AgentStatusOnline
+			fmt.Printf("Agent %s is back online\n", agentID)
+		} else {
+			// Agent is still offline, return error
+			return nil, fmt.Errorf("agent offline: %s", agentID)
+		}
 	}
 
 	// If we don't have a client connection yet, try to establish one
@@ -389,8 +404,25 @@ func (c *Core) getAgentConnection(agentID string) (*AgentConnection, error) {
 
 		creds := credentials.NewTLS(tlsConfig)
 
-		// Create gRPC connection to agent
-		conn, err := grpc.Dial(agentAddr, grpc.WithTransportCredentials(creds))
+		// Create gRPC connection to agent with retry options
+		conn, err := grpc.Dial(agentAddr,
+			grpc.WithTransportCredentials(creds),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  1.0 * time.Second,
+					Multiplier: 1.6,
+					Jitter:     0.2,
+					MaxDelay:   10.0 * time.Second,
+				},
+				MinConnectTimeout: 5 * time.Second,
+			}),
+			// Add keepalive to detect broken connections
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:                10 * time.Second,
+				Timeout:             5 * time.Second,
+				PermitWithoutStream: true,
+			}),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("dial agent %s at %s: %w", agentID, agentAddr, err)
 		}
@@ -402,7 +434,7 @@ func (c *Core) getAgentConnection(agentID string) (*AgentConnection, error) {
 	return agentConn, nil
 }
 
-// monitorAgents checks agent health periodically
+// monitorAgents checks agent health periodically and attempts reconnection
 func (c *Core) monitorAgents(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -415,9 +447,23 @@ func (c *Core) monitorAgents(ctx context.Context) {
 			c.agents.mu.Lock()
 
 			for id, agent := range c.agents.agents {
-				if time.Since(agent.LastSeen) > 90*time.Second {
-					agent.Status = AgentStatusOffline
-					c.audit.LogAgentOffline(ctx, id)
+				elapsed := time.Since(agent.LastSeen)
+
+				// Mark as offline if no heartbeat for more than 90 seconds
+				if elapsed > 90*time.Second {
+					if agent.Status != AgentStatusOffline {
+						agent.Status = AgentStatusOffline
+						c.audit.LogAgentOffline(ctx, id)
+						fmt.Printf("Agent %s marked as offline (last seen: %v ago)\n", id, elapsed)
+					}
+				}
+
+				// Attempt to clean up stale connections for offline agents
+				if agent.Status == AgentStatusOffline && agent.Client != nil {
+					// Close the stale connection
+					agent.Client.Close()
+					agent.Client = nil
+					fmt.Printf("Closed stale connection for offline agent %s\n", id)
 				}
 			}
 

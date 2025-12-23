@@ -158,32 +158,48 @@ make build
 make certs
 ```
 
-### 3. Run Agent
+### 3. Run with Enhanced Reliability (Recommended)
+
+For development with automatic restarts and connection recovery, use the enhanced runner:
 
 ```bash
-./bin/mandau-agent \
-  --listen :8443 \
-  --cert ./certs/agent.crt \
-  --key ./certs/agent.key \
-  --ca ./certs/ca.crt \
-  --stack-root /var/lib/mandau/stacks
+# Clean up any stale processes first
+./run-dev.sh --clean
+
+# Start the system with enhanced reliability features (default behavior)
+./run-dev.sh
+# or explicitly
+./run-dev.sh --host
 ```
 
-### 4. Run Core
+Or run manually with proper process management:
+
+### 3a. Run Core
 
 ```bash
 ./bin/mandau-core \
-  --listen :8080 \
+  --listen :8443 \
   --cert ./certs/core.crt \
   --key ./certs/core.key \
   --ca ./certs/ca.crt
 ```
 
-### 5. Use CLI
+### 3b. Run Agent
+
+```bash
+./bin/mandau-agent \
+  --server localhost:8443 \
+  --cert ./certs/agent.crt \
+  --key ./certs/agent.key \
+  --ca ./certs/ca.crt \
+  --stack-root ./stacks
+```
+
+### 4. Use CLI
 
 ```bash
 # Option 1: Using environment variables
-export MANDAU_SERVER=localhost:8080
+export MANDAU_SERVER=localhost:8443
 export MANDAU_CERT=./certs/client.crt
 export MANDAU_KEY=./certs/client.key
 export MANDAU_CA=./certs/ca.crt
@@ -200,7 +216,7 @@ export MANDAU_CA=./certs/ca.crt
 
 ```bash
 # Option 2: Using command-line flags
-./bin/mandau --server localhost:8080 --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt agent list
+./bin/mandau --server localhost:8443 --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt agent list
 
 # Deploy a stack
 ./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt stack apply agent-001 web ./compose.yaml
@@ -237,6 +253,88 @@ export MANDAU_CA=./certs/ca.crt
 - Runtime injection only
 - Vault integration
 - Encrypted at rest
+
+## 🛡️ Reliability & Resilience
+
+Mandau is designed for production environments with built-in reliability features:
+
+### Connection Management
+- **Automatic Reconnection**: Both core and agent automatically reconnect when connections are lost
+- **Retry Logic**: Exponential backoff prevents overwhelming the system during failures
+- **Keepalive Probes**: Connection health is monitored with keepalive mechanisms
+- **Graceful Degradation**: System continues operating during partial failures
+
+### Process Management
+- **Stale Process Cleanup**: Automatically detects and terminates stale processes
+- **PID Management**: Proper tracking of running processes with PID files
+- **Graceful Shutdown**: Proper cleanup on exit signals
+- **Automatic Restart**: Failed processes are automatically restarted
+
+### Monitoring & Recovery
+- **Health Checks**: Regular monitoring of process health
+- **Connection Cleanup**: Stale connections are cleaned up to prevent resource leaks
+- **Status Tracking**: Accurate online/offline status detection
+- **Reconnection Detection**: Agents that come back online are properly recognized
+
+### Failure Scenarios Handled
+- Network interruptions between core and agent
+- Agent process crashes and automatic restart
+- Core server restarts with agent reconnection
+- Port conflicts and resource cleanup
+- Stale registration cleanup
+
+## 🚀 Production Deployment
+
+### Using the Enhanced Runner (Recommended for Development)
+
+For development and testing with enhanced reliability features:
+
+```bash
+# Clean up any stale processes
+./run-dev.sh --clean
+
+# Start the system with enhanced reliability features (default behavior)
+./run-dev.sh
+
+# Or with custom ports
+./run-dev.sh --host-with-port 8445 8446
+```
+
+### Systemd Services (Recommended for Production)
+
+For production deployments, use the provided systemd service files:
+
+1. Copy the binaries and service files to appropriate locations
+2. Enable and start the services:
+
+```bash
+sudo cp bin/mandau-core /usr/local/bin/
+sudo cp bin/mandau-agent /usr/local/bin/
+sudo cp mandau-core.service mandau-agent.service /etc/systemd/system/
+sudo systemctl daemon-reload
+
+# Enable services to start on boot
+sudo systemctl enable mandau-core@$(whoami)
+sudo systemctl enable mandau-agent@$(whoami)
+
+# Start the services
+sudo systemctl start mandau-core@$(whoami)
+sudo systemctl start mandau-agent@$(whoami)
+```
+
+### High Availability
+
+**Core:**
+- Deploy 3+ replicas behind load balancer (future roadmap)
+- Use shared storage for agent registry
+- Enable leader election (future roadmap)
+- Configure health checks
+
+**Agent:**
+- One agent per Docker host
+- Automatic reconnection to Core
+- Local operation queuing (future roadmap)
+- Graceful degradation
 
 ## 🎯 Production Deployment
 

@@ -11,7 +11,7 @@
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/bhangun/mandau/mandau.git
+   git clone https://github.com/bhangun/mandau.git
    cd mandau
    ```
 
@@ -25,8 +25,14 @@
    docker-compose -f docker-compose-dev.yaml up -d
    ```
 
-   Or run on host (requires Go and Docker):
+   Or run on host with enhanced reliability (recommended for development):
    ```bash
+   # Clean up any stale processes
+   ./run-dev.sh --clean
+
+   # Start with automatic restarts and connection recovery (default behavior)
+   ./run-dev.sh
+   # or explicitly
    ./run-dev.sh --host
    ```
 
@@ -39,7 +45,7 @@
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/bhangun/mandau/mandau.git
+   git clone https://github.com/bhangun/mandau.git
    cd mandau
    ```
 
@@ -88,7 +94,7 @@
 
 5. **Install systemd services:**
    ```bash
-   sudo cp script-deploy/mandau-*.service /etc/systemd/system/
+   sudo cp mandau-*.service /etc/systemd/system/
    sudo systemctl daemon-reload
    sudo systemctl enable mandau-core mandau-agent
    sudo systemctl start mandau-core mandau-agent
@@ -188,3 +194,38 @@ openssl verify -CAfile /etc/mandau/certs/ca.crt \
 **Error: "certificate signed by unknown authority"**
 - Check that the correct CA certificate is being used
 - Regenerate certificates if needed: `make certs`
+
+### Common Connection and Process Issues
+
+**Agent showing as "offline"**
+- Check if both core and agent processes are running:
+  ```bash
+  ps aux | grep mandau
+  ```
+- Clean up stale processes and restart:
+  ```bash
+  ./run-dev.sh --clean
+  ./run-dev.sh
+  # or explicitly
+  ./run-dev.sh --host
+  ```
+- Verify ports are available:
+  ```bash
+  lsof -i :8443  # Core server
+  lsof -i :8444  # Agent server
+  ```
+
+**Port conflicts**
+- If you see "address already in use" errors, clean up stale processes:
+  ```bash
+  ./run-dev.sh --clean
+  ```
+- Or use different ports:
+  ```bash
+  ./run-dev.sh --host-with-port 8445 8446
+  ```
+
+**Connection refused errors**
+- Verify both core and agent are running
+- Check firewall settings if running across networks
+- Ensure certificates are properly configured
