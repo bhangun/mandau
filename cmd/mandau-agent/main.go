@@ -166,7 +166,45 @@ func NewAgent(cfg *Config) (*Agent, error) {
 
 	// Initialize plugins
 	pluginConfigs := make(map[string]map[string]interface{})
-	// Load plugin configs from /etc/mandau/plugins/*.yaml
+
+	// Configure RBAC plugin with default users
+	pluginConfigs["rbac-auth"] = map[string]interface{}{
+		"roles": `
+roles:
+  - name: admin
+    permissions:
+      - resource: "*"
+        actions: ["*"]
+  - name: operator
+    permissions:
+      - resource: "stack:*"
+        actions: ["read", "write", "delete"]
+      - resource: "container:*"
+        actions: ["read", "exec", "logs"]
+      - resource: "image:*"
+        actions: ["read", "pull"]
+      - resource: "file:*"
+        actions: ["read", "write"]
+  - name: viewer
+    permissions:
+      - resource: "*"
+        actions: ["read", "logs"]
+users:
+  - id: "mandau-core"
+    name: "Core Server"
+    roles: ["admin"]  # Core server has admin privileges to forward requests
+  - id: "mandau-cli"
+    name: "CLI User"
+    roles: ["admin"]
+  - id: "admin@example.com"
+    name: "Administrator"
+    roles: ["admin"]
+  - id: "ops@example.com"
+    name: "Operations Team"
+    roles: ["operator"]
+`,
+	}
+
 	if err := plugins.Init(ctx, pluginConfigs); err != nil {
 		return nil, fmt.Errorf("plugin init: %w", err)
 	}

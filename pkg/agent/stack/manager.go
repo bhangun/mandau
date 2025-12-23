@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
@@ -298,13 +299,13 @@ func (m *Manager) executeApply(ctx context.Context, opID string, req *ApplyStack
 
 	// Use docker compose CLI via exec (compose-go doesn't support full lifecycle)
 	// In production, this would use the compose API or reimplemented logic
-	cmd := []string{"docker", "compose", "-f", filepath.Join(stackPath, "compose.yaml")}
+	// Use relative path from stack root directory
+	relativeComposePath := filepath.Join(req.StackName, "compose.yaml")
+	cmd := []string{"docker", "compose", "-f", relativeComposePath, "up", "-d"}
 
 	if req.ForceRecreate {
 		cmd = append(cmd, "--force-recreate")
 	}
-
-	cmd = append(cmd, "up", "-d")
 
 	if len(req.Services) > 0 {
 		cmd = append(cmd, req.Services...)
@@ -450,9 +451,10 @@ func (m *Manager) executeRemove(ctx context.Context, opID, stackName, stackPath 
 	m.opMgr.EmitEvent(opID, "Stopping containers...")
 
 	// Execute docker compose down
-	cmd := []string{"docker", "compose", "-f", filepath.Join(stackPath, "compose.yaml"), "down"}
+	relativeComposePath := filepath.Join(stackName, "compose.yaml")
+	cmd := []string{"docker", "compose", "-f", relativeComposePath, "down"}
 	if removeVolumes {
-		cmd = append(cmd, "-v")
+		cmd = append(cmd, "--volumes")
 	}
 
 	if err := m.execCommand(ctx, cmd); err != nil {
@@ -471,7 +473,18 @@ func (m *Manager) executeRemove(ctx context.Context, opID, stackName, stackPath 
 }
 
 func (m *Manager) execCommand(ctx context.Context, cmd []string) error {
-	// Simplified - production would use exec.CommandContext with proper streaming
+	// Execute the command with proper context and error handling
+	command := exec.CommandContext(ctx, cmd[0], cmd[1:]...)
+
+	// Set working directory to the stack root directory so compose files can be found
+	command.Dir = m.stackRoot
+
+	// Execute the command
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("command failed: %v, output: %s", err, string(output))
+	}
+
 	return nil
 }
 

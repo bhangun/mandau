@@ -1,0 +1,7 @@
+version: '3.8'
+name: test-stack
+services:
+    test-service:
+      image: nginx:alpine
+      ports:
+        - "8080:80"

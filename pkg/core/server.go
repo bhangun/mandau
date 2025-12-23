@@ -14,6 +14,7 @@ import (
 
 	agentv1 "github.com/bhangun/mandau/api/v1"
 	"github.com/bhangun/mandau/pkg/plugin"
+	"github.com/bhangun/mandau/plugins/auth/rbac"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
@@ -107,7 +108,62 @@ func NewCore(cfg *CoreConfig) (*Core, error) {
 }
 
 func loadPlugins(plugins *plugin.Registry, dir string) error {
-	// TODO: implement plugin loading logic
+	// For now, register built-in plugins with default configuration
+	// In a real system, this would load plugin configurations from files
+
+	// Load RBAC plugin with default configuration
+	rbacPlugin := rbac.New()
+
+	// Default configuration for RBAC plugin - map certificate CN to users
+	// In production, this would be loaded from a config file
+	rbacConfig := map[string]interface{}{
+		"roles": `
+roles:
+  - name: admin
+    permissions:
+      - resource: "*"
+        actions: ["*"]
+  - name: operator
+    permissions:
+      - resource: "stack:*"
+        actions: ["read", "write", "delete"]
+      - resource: "container:*"
+        actions: ["read", "exec", "logs"]
+      - resource: "image:*"
+        actions: ["read", "pull"]
+      - resource: "file:*"
+        actions: ["read", "write"]
+  - name: viewer
+    permissions:
+      - resource: "*"
+        actions: ["read", "logs"]
+users:
+  - id: "mandau-cli"
+    name: "CLI User"
+    roles: ["admin"]
+  - id: "mandau-agent"
+    name: "Agent User"
+    roles: ["admin"]  # Agent needs admin rights to manage stacks on its host
+  - id: "admin@example.com"
+    name: "Administrator"
+    roles: ["admin"]
+  - id: "ops@example.com"
+    name: "Operations Team"
+    roles: ["operator"]
+`,
+	}
+
+	if err := plugins.Register(rbacPlugin); err != nil {
+		return fmt.Errorf("register rbac plugin: %w", err)
+	}
+
+	// Initialize plugins with configuration
+	if err := plugins.Init(context.Background(), map[string]map[string]interface{}{
+		"rbac-auth": rbacConfig,
+	}); err != nil {
+		return fmt.Errorf("init plugins: %w", err)
+	}
+
 	return nil
 }
 

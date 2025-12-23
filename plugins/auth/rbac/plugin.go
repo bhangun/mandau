@@ -115,8 +115,18 @@ func (p *RBACPlugin) loadRolesFromYAML(data []byte) error {
 }
 
 func (p *RBACPlugin) Authenticate(ctx context.Context, req *plugin.AuthRequest) (*plugin.Identity, error) {
-	// In real implementation, this would validate certificate or token
-	// For now, just enhance the identity
+	// In certificate-based auth, the UserID from the identity comes from the certificate's Common Name
+	// We need to verify that the certificate CN maps to an existing user in our system
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	// Check if the identity's UserID (which comes from certificate CN) exists as a user
+	_, exists := p.users[req.Identity.UserID]
+	if !exists {
+		return nil, fmt.Errorf("user not found: %s", req.Identity.UserID)
+	}
+
+	// Return the identity as-is, which will be used for authorization
 	return req.Identity, nil
 }
 
