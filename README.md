@@ -160,7 +160,57 @@ make build
 make certs
 ```
 
-### 3. Run with Enhanced Reliability (Recommended)
+### 3. Installation Options
+
+#### Option A: Install from Binary Release (Recommended)
+
+Download the appropriate binary package for your platform from the [releases page](https://github.com/bhangun/mandau/releases). Each release includes pre-built static binaries for:
+
+- Linux AMD64/ARM64
+- macOS AMD64/ARM64
+- Windows AMD64
+
+**For Linux/macOS:**
+```bash
+# Download and extract the archive for your platform
+# Example for Linux AMD64:
+VERSION=v1.0.0  # Replace with the latest version
+wget https://github.com/bhangun/mandau/releases/download/${VERSION}/mandau-linux-amd64-${VERSION}.tar.gz
+tar -xzf mandau-linux-amd64-${VERSION}.tar.gz
+
+# Make binaries executable and move to PATH
+chmod +x mandau mandau-core mandau-agent
+sudo mv mandau mandau-core mandau-agent /usr/local/bin/
+```
+
+**For Windows:**
+```powershell
+# Download the zip file for Windows AMD64 from the releases page
+# Example using PowerShell:
+$version = "v1.0.0"  # Replace with the latest version
+$downloadUrl = "https://github.com/bhangun/mandau/releases/download/$version/mandau-windows-amd64-$version.zip"
+$outputPath = "$env:TEMP\mandau-windows-amd64-$version.zip"
+Invoke-WebRequest -Uri $downloadUrl -OutFile $outputPath
+
+# Extract the zip file
+Expand-Archive -Path $outputPath -DestinationPath "$env:TEMP\mandau"
+# Copy mandau.exe, mandau-core.exe, and mandau-agent.exe to a directory in your PATH
+# Or add the extracted directory to your PATH environment variable
+```
+
+#### Option B: Build from Source (Development)
+
+```bash
+make build
+```
+
+### 4. Generate Certificates
+
+```bash
+make certs
+```
+
+### 5. Run with Enhanced Reliability (Recommended)
 
 For development with automatic restarts and connection recovery, use the enhanced runner:
 
@@ -176,7 +226,7 @@ For development with automatic restarts and connection recovery, use the enhance
 
 Or run manually with proper process management:
 
-### 3a. Run Core
+### 5a. Run Core
 
 ```bash
 ./bin/mandau-core \
@@ -186,7 +236,7 @@ Or run manually with proper process management:
   --ca ./certs/ca.crt
 ```
 
-### 3b. Run Agent
+### 5b. Run Agent
 
 ```bash
 ./bin/mandau-agent \
@@ -197,7 +247,7 @@ Or run manually with proper process management:
   --stack-root ./stacks
 ```
 
-### 4. Use CLI
+### 6. Use CLI
 
 ```bash
 # Option 1: Using environment variables

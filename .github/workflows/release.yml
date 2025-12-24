@@ -26,8 +26,10 @@ jobs:
       - name: Get tag
         id: tag
         run: |
-          echo "tag=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT
-          echo "version=${GITHUB_REF#refs/*/v}" >> $GITHUB_OUTPUT
+          TAG=${GITHUB_REF#refs/*/}
+          VERSION=${TAG#v}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Install zip tools
         run: |
@@ -36,29 +38,48 @@ jobs:
 
       - name: Build binaries
         run: |
-          make build
           mkdir -p dist
 
           # Build for different platforms
           # Linux AMD64
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 make build-static
-          tar -czf dist/mandau-linux-amd64-${{ steps.tag.outputs.version }}.tar.gz -C bin mandau mandau-core mandau-agent
+          echo "Building Linux AMD64 binaries..."
+          mkdir -p build/linux-amd64
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-amd64/mandau ./cmd/mandau-cli
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-amd64/mandau-core ./cmd/mandau-core
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-amd64/mandau-agent ./cmd/mandau-agent
+          tar -czf dist/mandau-linux-amd64-${{ steps.tag.outputs.version }}.tar.gz -C build/linux-amd64 mandau mandau-core mandau-agent
 
           # Linux ARM64
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 make build-static
-          tar -czf dist/mandau-linux-arm64-${{ steps.tag.outputs.version }}.tar.gz -C bin mandau mandau-core mandau-agent
+          echo "Building Linux ARM64 binaries..."
+          mkdir -p build/linux-arm64
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-arm64/mandau ./cmd/mandau-cli
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-arm64/mandau-core ./cmd/mandau-core
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-arm64/mandau-agent ./cmd/mandau-agent
+          tar -czf dist/mandau-linux-arm64-${{ steps.tag.outputs.version }}.tar.gz -C build/linux-arm64 mandau mandau-core mandau-agent
 
           # macOS AMD64
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 make build-static
-          tar -czf dist/mandau-darwin-amd64-${{ steps.tag.outputs.version }}.tar.gz -C bin mandau mandau-core mandau-agent
+          echo "Building macOS AMD64 binaries..."
+          mkdir -p build/darwin-amd64
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-amd64/mandau ./cmd/mandau-cli
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-amd64/mandau-core ./cmd/mandau-core
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-amd64/mandau-agent ./cmd/mandau-agent
+          tar -czf dist/mandau-darwin-amd64-${{ steps.tag.outputs.version }}.tar.gz -C build/darwin-amd64 mandau mandau-core mandau-agent
 
           # macOS ARM64
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 make build-static
-          tar -czf dist/mandau-darwin-arm64-${{ steps.tag.outputs.version }}.tar.gz -C bin mandau mandau-core mandau-agent
+          echo "Building macOS ARM64 binaries..."
+          mkdir -p build/darwin-arm64
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-arm64/mandau ./cmd/mandau-cli
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-arm64/mandau-core ./cmd/mandau-core
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-arm64/mandau-agent ./cmd/mandau-agent
+          tar -czf dist/mandau-darwin-arm64-${{ steps.tag.outputs.version }}.tar.gz -C build/darwin-arm64 mandau mandau-core mandau-agent
 
           # Windows AMD64
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 make build-static
-          zip dist/mandau-windows-amd64-${{ steps.tag.outputs.version }}.zip bin/mandau.exe bin/mandau-core.exe bin/mandau-agent.exe
+          echo "Building Windows AMD64 binaries..."
+          mkdir -p build/windows-amd64
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/windows-amd64/mandau.exe ./cmd/mandau-cli
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/windows-amd64/mandau-core.exe ./cmd/mandau-core
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/windows-amd64/mandau-agent.exe ./cmd/mandau-agent
+          zip dist/mandau-windows-amd64-${{ steps.tag.outputs.version }}.zip -j build/windows-amd64/mandau.exe build/windows-amd64/mandau-core.exe build/windows-amd64/mandau-agent.exe
 
       - name: Create Release
         uses: softprops/action-gh-release@v1

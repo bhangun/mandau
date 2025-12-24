@@ -7,7 +7,45 @@
 
 ## Installation
 
-### Option 1: Docker Compose (Development)
+### Option 1: Install from Binary Release (Recommended for Production)
+
+Download the appropriate binary package for your platform from the [releases page](https://github.com/bhangun/mandau/releases). Each release includes pre-built static binaries for:
+
+- Linux AMD64/ARM64
+- macOS AMD64/ARM64
+- Windows AMD64
+
+**For Linux/macOS:**
+```bash
+# Download and extract the archive for your platform
+# Example for Linux AMD64:
+VERSION=v1.0.0  # Replace with the latest version
+wget https://github.com/bhangun/mandau/releases/download/${VERSION}/mandau-linux-amd64-${VERSION}.tar.gz
+tar -xzf mandau-linux-amd64-${VERSION}.tar.gz
+
+# Make binaries executable and move to PATH
+sudo chmod +x mandau mandau-core mandau-agent
+sudo mv mandau mandau-core mandau-agent /usr/local/bin/
+
+# Generate certificates
+./scripts/generate-certs.sh ./certs
+```
+
+**For Windows:**
+```powershell
+# Download the zip file for Windows AMD64 from the releases page
+# Example using PowerShell:
+$version = "v1.0.0"  # Replace with the latest version
+$downloadUrl = "https://github.com/bhangun/mandau/releases/download/$version/mandau-windows-amd64-$version.zip"
+$outputPath = "$env:TEMP\mandau-windows-amd64-$version.zip"
+Invoke-WebRequest -Uri $downloadUrl -OutFile $outputPath
+
+# Extract the zip file
+Expand-Archive -Path $outputPath -DestinationPath "$env:TEMP\mandau"
+# Copy mandau.exe, mandau-core.exe, and mandau-agent.exe to a directory in your PATH
+```
+
+### Option 2: Docker Compose (Development)
 
 1. **Clone the repository:**
    ```bash
@@ -41,7 +79,7 @@
    docker-compose ps
    ```
 
-### Option 2: Host Installation (Production)
+### Option 3: Host Installation (Production)
 
 1. **Clone the repository:**
    ```bash
@@ -66,7 +104,7 @@
    sudo systemctl status mandau-core mandau-agent
    ```
 
-### Option 3: Manual Binary Installation (Production)
+### Option 4: Manual Binary Installation (Production)
 
 1. **Build static binaries:**
    ```bash
