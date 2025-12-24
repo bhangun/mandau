@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bhangun/mandau/api/v1"
+	agentv1 "github.com/bhangun/mandau/api/v1"
 	"github.com/bhangun/mandau/pkg/agent/container"
 	"github.com/bhangun/mandau/pkg/agent/filesystem"
 	"github.com/bhangun/mandau/pkg/agent/operation"
@@ -376,7 +376,7 @@ func (a *Agent) registerWithServer() error {
 
 	resp, err := client.RegisterAgent(ctx, &agentv1.RegisterRequest{
 		Hostname:     a.config.Hostname,
-		AgentId:      a.config.AgentID, // Send persistent agent ID
+		AgentId:      a.config.AgentID,    // Send persistent agent ID
 		Labels:       map[string]string{}, // Add agent labels
 		Capabilities: []string{"docker", "stack", "container", "logs", "exec"},
 	})
@@ -424,10 +424,10 @@ func (a *Agent) startHeartbeat() {
 func (a *Agent) shouldReconnect(err error) bool {
 	// Check if the error indicates a connection issue
 	return status.Code(err) == codes.Unavailable ||
-		   status.Code(err) == codes.DeadlineExceeded ||
-		   strings.Contains(err.Error(), "connection refused") ||
-		   strings.Contains(err.Error(), "connection reset") ||
-		   strings.Contains(err.Error(), "broken pipe")
+		status.Code(err) == codes.DeadlineExceeded ||
+		strings.Contains(err.Error(), "connection refused") ||
+		strings.Contains(err.Error(), "connection reset") ||
+		strings.Contains(err.Error(), "broken pipe")
 }
 
 // reconnectToServer attempts to reconnect to the core server

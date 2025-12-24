@@ -1,6 +1,6 @@
 syntax = "proto3";
 package mandau.agent.v1;
-option go_package = "github.com/bhangun/mandau/api/v1;agentv1";
+option go_package = "github.com/bhangun/mandau/api/v1;v1";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
@@ -15,9 +15,7 @@ service CoreService {
 
 message ListAgentsRequest {}
 
-message ListAgentsResponse {
-  repeated Agent agents = 1;
-}
+message ListAgentsResponse { repeated Agent agents = 1; }
 
 message Agent {
   string id = 1;
@@ -39,7 +37,7 @@ service AgentService {
 message RegisterRequest {
   string hostname = 1;
   string version = 2;
-  string agent_id = 5;  // Optional persistent agent ID
+  string agent_id = 5; // Optional persistent agent ID
   map<string, string> labels = 3;
   repeated string capabilities = 4;
 }
@@ -115,13 +113,15 @@ enum DiffAction {
 // Container Management Service
 service ContainerService {
   rpc ListContainers(ListContainersRequest) returns (ListContainersResponse);
-  rpc InspectContainer(InspectContainerRequest) returns (InspectContainerResponse);
+  rpc InspectContainer(InspectContainerRequest)
+      returns (InspectContainerResponse);
   rpc StreamLogs(StreamLogsRequest) returns (stream LogEntry);
   rpc Exec(stream ExecRequest) returns (stream ExecResponse);
   rpc GetStats(GetStatsRequest) returns (stream ContainerStats);
   rpc StartContainer(StartContainerRequest) returns (StartContainerResponse);
   rpc StopContainer(StopContainerRequest) returns (StopContainerResponse);
-  rpc RestartContainer(RestartContainerRequest) returns (RestartContainerResponse);
+  rpc RestartContainer(RestartContainerRequest)
+      returns (RestartContainerResponse);
 }
 
 message Container {
@@ -204,9 +204,7 @@ message ListFilesRequest {
   string path = 2; // Relative to stack root
 }
 
-message ListFilesResponse {
-  repeated FileInfo files = 1;
-}
+message ListFilesResponse { repeated FileInfo files = 1; }
 
 message FileInfo {
   string name = 1;
@@ -283,9 +281,7 @@ message HeartbeatResponse {
 
 message CapabilitiesRequest {}
 
-message CapabilitiesResponse {
-  repeated string capabilities = 1;
-}
+message CapabilitiesResponse { repeated string capabilities = 1; }
 
 message HealthRequest {}
 
@@ -294,21 +290,11 @@ message HealthResponse {
   map<string, string> status = 2;
 }
 
-message ListStacksRequest {
-  string agent_id = 1;
-}
-message ListStacksResponse {
-  repeated Stack stacks = 1;
-}
-message GetStackRequest {
-  string stack_id = 1;
-}
-message GetStackResponse {
-  Stack stack = 1;
-}
-message RemoveStackRequest {
-  string stack_id = 1;
-}
+message ListStacksRequest { string agent_id = 1; }
+message ListStacksResponse { repeated Stack stacks = 1; }
+message GetStackRequest { string stack_id = 1; }
+message GetStackResponse { Stack stack = 1; }
+message RemoveStackRequest { string stack_id = 1; }
 message GetStackLogsRequest {
   string agent_id = 1;
   string stack_name = 2;
@@ -316,56 +302,30 @@ message GetStackLogsRequest {
 }
 
 message ListContainersRequest {}
-message ListContainersResponse {
-  repeated Container containers = 1;
-}
-message InspectContainerRequest {
-  string container_id = 1;
-}
-message InspectContainerResponse {
-  Container container = 1;
-}
-message StreamLogsRequest {
-  string container_id = 1;
-}
-message GetStatsRequest {
-  string container_id = 1;
-}
-message StartContainerRequest {
-  string container_id = 1;
-}
+message ListContainersResponse { repeated Container containers = 1; }
+message InspectContainerRequest { string container_id = 1; }
+message InspectContainerResponse { Container container = 1; }
+message StreamLogsRequest { string container_id = 1; }
+message GetStatsRequest { string container_id = 1; }
+message StartContainerRequest { string container_id = 1; }
 message StartContainerResponse {}
-message StopContainerRequest {
-  string container_id = 1;
-}
+message StopContainerRequest { string container_id = 1; }
 message StopContainerResponse {}
-message RestartContainerRequest {
-  string container_id = 1;
-}
+message RestartContainerRequest { string container_id = 1; }
 message RestartContainerResponse {}
 
 message WriteFileResponse {}
-message DeleteFileRequest {
-  string path = 1;
-}
+message DeleteFileRequest { string path = 1; }
 message DeleteFileResponse {}
-message CreateDirectoryRequest {
-  string path = 1;
-}
+message CreateDirectoryRequest { string path = 1; }
 message CreateDirectoryResponse {}
 
-message GetOperationRequest {
-  string operation_id = 1;
-}
+message GetOperationRequest { string operation_id = 1; }
 message ListOperationsRequest {}
 message ListOperationsResponse {}
-message CancelOperationRequest {
-  string operation_id = 1;
-}
+message CancelOperationRequest { string operation_id = 1; }
 message CancelOperationResponse {}
-message StreamOperationRequest {
-  string operation_id = 1;
-}
+message StreamOperationRequest { string operation_id = 1; }
 
 message CPUStats {}
 message MemoryStats {}

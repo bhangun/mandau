@@ -4,7 +4,7 @@
 // 	protoc        v6.33.2
 // source: api/v1/agent.proto
 
-package agentv1
+package v1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -3993,7 +3993,7 @@ const file_api_v1_agent_proto_rawDesc = "" +
 	"\fGetOperation\x12$.mandau.agent.v1.GetOperationRequest\x1a\x1a.mandau.agent.v1.Operation\x12a\n" +
 	"\x0eListOperations\x12&.mandau.agent.v1.ListOperationsRequest\x1a'.mandau.agent.v1.ListOperationsResponse\x12d\n" +
 	"\x0fCancelOperation\x12'.mandau.agent.v1.CancelOperationRequest\x1a(.mandau.agent.v1.CancelOperationResponse\x12]\n" +
-	"\x0fStreamOperation\x12'.mandau.agent.v1.StreamOperationRequest\x1a\x1f.mandau.agent.v1.OperationEvent0\x01B*Z(github.com/bhangun/mandau/api/v1;agentv1b\x06proto3"
+	"\x0fStreamOperation\x12'.mandau.agent.v1.StreamOperationRequest\x1a\x1f.mandau.agent.v1.OperationEvent0\x01B%Z#github.com/bhangun/mandau/api/v1;v1b\x06proto3"
 
 var (
 	file_api_v1_agent_proto_rawDescOnce sync.Once

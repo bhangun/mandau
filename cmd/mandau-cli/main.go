@@ -9,24 +9,16 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/spf13/cobra"
-	agentv1 "github.com/bhangun/mandau/api/v1"
+	v1 "github.com/bhangun/mandau/api/v1"
 	"github.com/bhangun/mandau/pkg/config"
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
-type CLI struct {
-	coreClient agentv1.CoreServiceClient
-	agentClient agentv1.AgentServiceClient
-	conn   *grpc.ClientConn
-	config *config.CoreConfig  // For CLI, we can reuse the core config structure
-}
-
-func main() {
-	cli := &CLI{}
-
-	rootCmd := &cobra.Command{
+var (
+	cli     = &CLI{}
+	rootCmd = &cobra.Command{
 		Use:   "mandau",
 		Short: "Mandau infrastructure control CLI",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -39,6 +31,16 @@ func main() {
 			return nil
 		},
 	}
+)
+
+type CLI struct {
+	coreClient  v1.CoreServiceClient
+	agentClient v1.AgentServiceClient
+	conn        *grpc.ClientConn
+	config      *config.CoreConfig // For CLI, we can reuse the core config structure
+}
+
+func main() {
 
 	// Global flags
 	rootCmd.PersistentFlags().String("server", "localhost:8443", "Core server address")
@@ -176,9 +178,9 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 
 	c.conn = conn
 	// Use CoreServiceClient for core operations like ListAgents
-	c.coreClient = agentv1.NewCoreServiceClient(conn)
+	c.coreClient = v1.NewCoreServiceClient(conn)
 	// Use AgentServiceClient for agent-specific operations
-	c.agentClient = agentv1.NewAgentServiceClient(conn)
+	c.agentClient = v1.NewAgentServiceClient(conn)
 
 	return nil
 }
@@ -207,7 +209,7 @@ func (c *CLI) getFlagOrEnv(cmd *cobra.Command, flagName, envName, defaultValue s
 func (c *CLI) listAgents(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	resp, err := c.coreClient.ListAgents(ctx, &agentv1.ListAgentsRequest{})
+	resp, err := c.coreClient.ListAgents(ctx, &v1.ListAgentsRequest{})
 	if err != nil {
 		return err
 	}
@@ -229,9 +231,9 @@ func (c *CLI) listStacks(cmd *cobra.Command, args []string) error {
 	agentID := args[0]
 	ctx := context.Background()
 
-	stackClient := agentv1.NewStackServiceClient(c.conn)
+	stackClient := v1.NewStackServiceClient(c.conn)
 
-	resp, err := stackClient.ListStacks(ctx, &agentv1.ListStacksRequest{
+	resp, err := stackClient.ListStacks(ctx, &v1.ListStacksRequest{
 		AgentId: agentID,
 	})
 	if err != nil {
@@ -262,9 +264,9 @@ func (c *CLI) applyStack(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	stackClient := agentv1.NewStackServiceClient(c.conn)
+	stackClient := v1.NewStackServiceClient(c.conn)
 
-	stream, err := stackClient.ApplyStack(ctx, &agentv1.ApplyStackRequest{
+	stream, err := stackClient.ApplyStack(ctx, &v1.ApplyStackRequest{
 		AgentId:        agentID,
 		StackName:      stackName,
 		ComposeContent: string(content),
@@ -304,9 +306,9 @@ func (c *CLI) stackLogs(cmd *cobra.Command, args []string) error {
 	stackName := args[1]
 
 	ctx := context.Background()
-	stackClient := agentv1.NewStackServiceClient(c.conn)
+	stackClient := v1.NewStackServiceClient(c.conn)
 
-	stream, err := stackClient.GetStackLogs(ctx, &agentv1.GetStackLogsRequest{
+	stream, err := stackClient.GetStackLogs(ctx, &v1.GetStackLogsRequest{
 		AgentId:   agentID,
 		StackName: stackName,
 		Follow:    true,

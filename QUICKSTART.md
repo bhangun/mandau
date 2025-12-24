@@ -157,6 +157,71 @@ mandau stack logs agent-001 mystack
 mandau container exec agent-001 mystack-web-1 /bin/sh
 ```
 
+### Container Management
+
+```bash
+# List containers on an agent
+mandau container list agent-001
+
+# Get container logs
+mandau container logs agent-001 mystack-web-1
+
+# Start/stop containers
+mandau container start agent-001 mystack-web-1
+mandau container stop agent-001 mystack-web-1
+```
+
+### Service Management
+
+```bash
+# Nginx management
+mandau services nginx create-proxy agent-001 example.com http://localhost:3000 80
+mandau services nginx list agent-001
+
+# Systemd service management
+mandau services systemd start agent-001 myservice
+mandau services systemd status agent-001 myservice
+mandau services systemd restart agent-001 myservice
+
+# SSL certificate management
+mandau services ssl obtain agent-001 example.com admin@example.com
+mandau services ssl renew-all agent-001
+
+# Firewall management
+mandau services firewall allow-port agent-001 80 tcp
+mandau services firewall deny-port agent-001 8080 tcp
+mandau services firewall list agent-001
+
+# Cron job management
+mandau services cron add agent-001 backup-job "0 2 * * *" "/usr/local/bin/backup.sh"
+mandau services cron list agent-001
+
+# Environment management
+mandau services environment info agent-001
+mandau services environment install agent-001 nginx
+
+# DNS management
+mandau services dns create-zone agent-001 example.com
+mandau services dns add-a agent-001 example.com www 192.168.1.100
+```
+
+### Plugin Management
+
+```bash
+# Authentication management
+mandau plugins auth status
+mandau plugins auth list-users
+
+# Secrets management
+mandau plugins secrets get my-secret
+mandau plugins secrets set my-secret "my-value"
+mandau plugins secrets delete my-secret
+
+# Audit log management
+mandau plugins audit list
+mandau plugins audit query "agent:agent-001"
+```
+
 ## Security Best Practices
 
 1. **Never expose Docker socket directly**

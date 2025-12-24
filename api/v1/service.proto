@@ -1,0 +1,470 @@
+syntax = "proto3";
+package mandau.services.v1;
+option go_package = "github.com/bhangun/mandau/api/v1;v1";
+
+import "google/protobuf/timestamp.proto";
+
+// Nginx Management Service
+service NginxService {
+  rpc CreateVirtualHost(CreateVirtualHostRequest)
+      returns (CreateVirtualHostResponse);
+  rpc EnableVirtualHost(EnableVirtualHostRequest)
+      returns (EnableVirtualHostResponse);
+  rpc DisableVirtualHost(DisableVirtualHostRequest)
+      returns (DisableVirtualHostResponse);
+  rpc DeleteVirtualHost(DeleteVirtualHostRequest)
+      returns (DeleteVirtualHostResponse);
+  rpc ListVirtualHosts(ListVirtualHostsRequest)
+      returns (ListVirtualHostsResponse);
+  rpc CreateReverseProxy(CreateReverseProxyRequest)
+      returns (CreateReverseProxyResponse);
+  rpc CreateLoadBalancer(CreateLoadBalancerRequest)
+      returns (CreateLoadBalancerResponse);
+}
+
+message CreateVirtualHostRequest {
+  string agent_id = 1;
+  string server_name = 2;
+  int32 listen = 3;
+  string root = 4;
+  repeated string index = 5;
+  repeated Location locations = 6;
+  SSLConfig ssl = 7;
+  string proxy_pass = 8;
+}
+
+message CreateVirtualHostResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message EnableVirtualHostRequest {
+  string agent_id = 1;
+  string server_name = 2;
+}
+
+message EnableVirtualHostResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message DisableVirtualHostRequest {
+  string agent_id = 1;
+  string server_name = 2;
+}
+
+message DisableVirtualHostResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message DeleteVirtualHostRequest {
+  string agent_id = 1;
+  string server_name = 2;
+}
+
+message DeleteVirtualHostResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message ListVirtualHostsRequest { string agent_id = 1; }
+
+message ListVirtualHostsResponse { repeated string vhosts = 1; }
+
+message Location {
+  string path = 1;
+  string proxy_pass = 2;
+  string root = 3;
+  repeated string try_files = 4;
+  map<string, string> headers = 5;
+}
+
+message SSLConfig {
+  string certificate = 1;
+  string certificate_key = 2;
+  repeated string protocols = 3;
+  string ciphers = 4;
+}
+
+message CreateReverseProxyRequest {
+  string agent_id = 1;
+  string domain = 2;
+  string upstream = 3;
+  int32 port = 4;
+}
+
+message CreateReverseProxyResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message CreateLoadBalancerRequest {
+  string agent_id = 1;
+  string name = 2;
+  repeated string backends = 3;
+  string algorithm = 4;
+}
+
+message CreateLoadBalancerResponse {
+  string status = 1;
+  string error = 2;
+}
+
+// Systemd Service Management
+service SystemdService {
+  rpc CreateService(CreateServiceRequest) returns (CreateServiceResponse);
+  rpc EnableService(EnableServiceRequest) returns (EnableServiceResponse);
+  rpc DisableService(DisableServiceRequest) returns (DisableServiceResponse);
+  rpc StartService(StartServiceRequest) returns (StartServiceResponse);
+  rpc StopService(StopServiceRequest) returns (StopServiceResponse);
+  rpc RestartService(RestartServiceRequest) returns (RestartServiceResponse);
+  rpc GetServiceStatus(GetServiceStatusRequest)
+      returns (GetServiceStatusResponse);
+  rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
+}
+
+message CreateServiceRequest {
+  string agent_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string after = 4;
+  string type = 5;
+  string user = 6;
+  string group = 7;
+  string working_dir = 8;
+  string exec_start = 9;
+  string exec_stop = 10;
+  map<string, string> environment = 11;
+  string restart = 12;
+  int32 restart_sec = 13;
+  int32 limit_nofile = 14;
+  string memory_limit = 15;
+  bool private_tmp = 16;
+  string protect_system = 17;
+}
+
+message CreateServiceResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message EnableServiceRequest {
+  string agent_id = 1;
+  string name = 2;
+}
+
+message EnableServiceResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message DisableServiceRequest {
+  string agent_id = 1;
+  string name = 2;
+}
+
+message DisableServiceResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message StartServiceRequest {
+  string agent_id = 1;
+  string name = 2;
+}
+
+message StartServiceResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message StopServiceRequest {
+  string agent_id = 1;
+  string name = 2;
+}
+
+message StopServiceResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message RestartServiceRequest {
+  string agent_id = 1;
+  string name = 2;
+}
+
+message RestartServiceResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message GetServiceStatusRequest {
+  string agent_id = 1;
+  string name = 2;
+}
+
+message GetServiceStatusResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message ListServicesRequest { string agent_id = 1; }
+
+message ListServicesResponse { repeated string services = 1; }
+
+// Firewall Service
+service FirewallService {
+  rpc AddRule(AddFirewallRuleRequest) returns (AddFirewallRuleResponse);
+  rpc DeleteRule(DeleteFirewallRuleRequest)
+      returns (DeleteFirewallRuleResponse);
+  rpc ListRules(ListFirewallRulesRequest) returns (ListFirewallRulesResponse);
+  rpc AllowPort(AllowPortRequest) returns (AllowPortResponse);
+  rpc DenyPort(DenyPortRequest) returns (DenyPortResponse);
+  rpc Enable(EnableFirewallRequest) returns (EnableFirewallResponse);
+  rpc Disable(DisableFirewallRequest) returns (DisableFirewallResponse);
+}
+
+message AddFirewallRuleRequest {
+  string agent_id = 1;
+  string action = 2; // allow, deny, reject
+  string proto = 3;  // tcp, udp, any
+  string from_ip = 4;
+  int32 from_port = 5;
+  string to_ip = 6;
+  int32 to_port = 7;
+  string comment = 8;
+}
+
+message AddFirewallRuleResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message DeleteFirewallRuleRequest {
+  string agent_id = 1;
+  int32 rule_number = 2;
+}
+
+message DeleteFirewallRuleResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message ListFirewallRulesRequest { string agent_id = 1; }
+
+message ListFirewallRulesResponse { repeated string rules = 1; }
+
+message AllowPortRequest {
+  string agent_id = 1;
+  int32 port = 2;
+  string proto = 3;
+}
+
+message AllowPortResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message DenyPortRequest {
+  string agent_id = 1;
+  int32 port = 2;
+  string proto = 3;
+}
+
+message DenyPortResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message EnableFirewallRequest { string agent_id = 1; }
+
+message EnableFirewallResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message DisableFirewallRequest { string agent_id = 1; }
+
+message DisableFirewallResponse {
+  string status = 1;
+  string error = 2;
+}
+
+// ACME/SSL Certificate Service
+service ACMEService {
+  rpc ObtainCertificate(ObtainCertificateRequest)
+      returns (ObtainCertificateResponse);
+  rpc RenewCertificate(RenewCertificateRequest)
+      returns (RenewCertificateResponse);
+  rpc RenewAll(RenewAllCertificatesRequest)
+      returns (RenewAllCertificatesResponse);
+  rpc RevokeCertificate(RevokeCertificateRequest)
+      returns (RevokeCertificateResponse);
+  rpc ListCertificates(ListCertificatesRequest)
+      returns (ListCertificatesResponse);
+}
+
+message ObtainCertificateRequest {
+  string agent_id = 1;
+  string domain = 2;
+  string email = 3;
+  bool production = 4;
+}
+
+message ObtainCertificateResponse {
+  Certificate certificate = 1;
+  string error = 2;
+}
+
+message RenewCertificateRequest {
+  string agent_id = 1;
+  string domain = 2;
+}
+
+message RenewCertificateResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message RenewAllCertificatesRequest { string agent_id = 1; }
+
+message RenewAllCertificatesResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message RevokeCertificateRequest {
+  string agent_id = 1;
+  string domain = 2;
+}
+
+message RevokeCertificateResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message ListCertificatesRequest { string agent_id = 1; }
+
+message ListCertificatesResponse { repeated Certificate certificates = 1; }
+
+message Certificate {
+  string domain = 1;
+  string cert_path = 2;
+  string key_path = 3;
+  string expires_at = 4;
+  string issued_at = 5;
+  string issuer = 6;
+}
+
+// Host Environment Service
+service HostEnvironmentService {
+  rpc GetHostInfo(GetHostInfoRequest) returns (GetHostInfoResponse);
+  rpc InstallPackage(InstallPackageRequest) returns (InstallPackageResponse);
+  rpc RemovePackage(RemovePackageRequest) returns (RemovePackageResponse);
+  rpc UpdatePackages(UpdatePackagesRequest) returns (UpdatePackagesResponse);
+  rpc ListPackages(ListPackagesRequest) returns (ListPackagesResponse);
+  rpc SetSysctl(SetSysctlRequest) returns (SetSysctlResponse);
+  rpc GetSysctl(GetSysctlRequest) returns (GetSysctlResponse);
+}
+
+message GetHostInfoRequest { string agent_id = 1; }
+
+message GetHostInfoResponse {
+  string hostname = 1;
+  string os = 2;
+  string kernel = 3;
+  string architecture = 4;
+  int32 cpu_cores = 5;
+  int64 memory_mb = 6;
+  int64 disk_gb = 7;
+  string uptime = 8;
+}
+
+message InstallPackageRequest {
+  string agent_id = 1;
+  string package_name = 2;
+}
+
+message InstallPackageResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message RemovePackageRequest {
+  string agent_id = 1;
+  string package_name = 2;
+}
+
+message RemovePackageResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message UpdatePackagesRequest { string agent_id = 1; }
+
+message UpdatePackagesResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message ListPackagesRequest { string agent_id = 1; }
+
+message ListPackagesResponse { repeated string packages = 1; }
+
+message SetSysctlRequest {
+  string agent_id = 1;
+  string key = 2;
+  string value = 3;
+}
+
+message SetSysctlResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message GetSysctlRequest {
+  string agent_id = 1;
+  string key = 2;
+}
+
+message GetSysctlResponse {
+  string value = 1;
+  string error = 2;
+}
+
+// ServiceOperationEvent - used for streaming service deployment operations
+message ServiceOperationEvent {
+  string operation_id = 1;
+  string state = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  string message = 4;
+  int32 progress = 5;
+  string error = 6;
+}
+
+// Complete Service Deployment
+service ServiceDeploymentService {
+  rpc DeployWebService(DeployWebServiceRequest)
+      returns (stream ServiceOperationEvent);
+  rpc RemoveWebService(RemoveWebServiceRequest)
+      returns (stream ServiceOperationEvent);
+}
+
+message DeployWebServiceRequest {
+  string agent_id = 1;
+  string name = 2;
+  string description = 3;
+  string domain = 4;
+  int32 port = 5;
+  string command = 6;
+  string working_dir = 7;
+  string user = 8;
+  bool ssl = 9;
+  map<string, string> environment = 10;
+}
+
+message RemoveWebServiceRequest {
+  string agent_id = 1;
+  string name = 2;
+}

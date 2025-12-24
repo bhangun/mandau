@@ -29,6 +29,7 @@ plugins:
   enabled:
     rbac-auth: true
     file-audit: true
+    vault-secrets: true
   configs:
     rbac-auth:
       roles: |
@@ -47,6 +48,10 @@ plugins:
           - id: "admin@example.com"
             name: "Administrator"
             roles: ["admin"]
+    vault-secrets:
+      address: "http://vault:8200"
+      token: "vault-token-here"
+      path: "secret/data/mandau"
 
 agent_management:
   heartbeat_interval: "30s"
@@ -66,6 +71,20 @@ plugin_dir: "/usr/lib/mandau/plugins"
 - `server.tls.server_name`: Server name for certificate verification
 - `plugins.enabled`: Map of plugin names to boolean values indicating if they should be loaded
 - `plugins.configs`: Map of plugin-specific configurations
+
+### Available Core Plugins
+
+- `rbac-auth`: Role-based access control plugin
+  - Configuration options:
+    - `roles`: YAML string defining roles, permissions, and users
+- `file-audit`: File-based audit logging plugin
+  - Configuration options:
+    - `log_dir`: Directory to store audit logs (default: `/var/log/mandau`)
+- `vault-secrets`: HashiCorp Vault integration plugin
+  - Configuration options:
+    - `address`: Vault server address
+    - `token`: Authentication token
+    - `path`: Secrets path in Vault
 - `agent_management.heartbeat_interval`: How often agents should send heartbeats (duration string)
 - `agent_management.offline_timeout`: How long to wait before marking an agent as offline (duration string)
 - `agent_management.auto_deregister`: Whether to automatically remove offline agents
@@ -151,6 +170,26 @@ security:
 - `stacks.max_concurrent_operations`: Maximum number of concurrent stack operations
 - `plugins.enabled`: Map of plugin names to boolean values indicating if they should be loaded
 - `plugins.configs`: Map of plugin-specific configurations
+
+### Available Agent Plugins
+
+- `rbac-auth`: Role-based access control plugin
+  - Configuration options:
+    - `roles`: YAML string defining roles, permissions, and users
+- `file-audit`: File-based audit logging plugin
+  - Configuration options:
+    - `log_dir`: Directory to store audit logs (default: `/var/log/mandau`)
+- `nginx-manager`: Nginx configuration management plugin
+  - Configuration options:
+    - `config_dir`: Nginx configuration directory (default: `/etc/nginx`)
+- `systemd-manager`: Systemd service management plugin
+  - Configuration options:
+    - `unit_dir`: Systemd unit directory (default: `/etc/systemd/system`)
+- `acme-manager`: SSL certificate management plugin
+  - Configuration options:
+    - `email`: Email address for certificate registration
+    - `production`: Whether to use production ACME server (default: false)
+
 - `security.exec_timeout`: Maximum time for container exec operations
 - `security.log_retention`: How long to retain logs
 - `security.terminal_recording`: Whether to record terminal sessions

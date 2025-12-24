@@ -134,7 +134,9 @@ Mandau is a secure, operator-grade control plane for managing Docker infrastruct
 - Agent management
 - Stack operations
 - Log streaming
-- Container exec
+- Container management (exec, list, logs, start, stop)
+- Service management (nginx, systemd, ssl, firewall, dns, cron, environment)
+- Plugin management (auth, secrets, audit)
 - Interactive mode
 
 ### 8. **Deployment Configurations**
@@ -212,6 +214,18 @@ export MANDAU_CA=./certs/ca.crt
 
 # Stream logs
 ./bin/mandau stack logs agent-001 web
+
+# Execute command in container
+./bin/mandau container exec agent-001 web-container /bin/sh
+
+# Manage services
+./bin/mandau services nginx create-proxy agent-001 example.com http://localhost:3000 80
+./bin/mandau services systemd start agent-001 myservice
+./bin/mandau services firewall allow-port agent-001 80 tcp
+
+# Manage plugins
+./bin/mandau plugins secrets get my-secret
+./bin/mandau plugins auth status
 ```
 
 ```bash
@@ -223,6 +237,18 @@ export MANDAU_CA=./certs/ca.crt
 
 # Stream logs
 ./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt stack logs agent-001 web
+
+# Execute command in container
+./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt container exec agent-001 web-container /bin/sh
+
+# Manage services
+./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt services nginx create-proxy agent-001 example.com http://localhost:3000 80
+./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt services systemd start agent-001 myservice
+./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt services firewall allow-port agent-001 80 tcp
+
+# Manage plugins
+./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt plugins secrets get my-secret
+./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt plugins auth status
 ```
 
 ## 🔒 Security Model
@@ -521,6 +547,43 @@ agent:
     datacenter: us-east-1
     zone: a
     tier: frontend
+```
+
+## 🛠️ CLI Command Reference
+
+### Agent Management
+- `mandau agent list` - List all registered agents
+
+### Stack Management
+- `mandau stack list <agent-id>` - List stacks on an agent
+- `mandau stack apply <agent-id> <stack-name> <compose-file>` - Apply a stack to an agent
+- `mandau stack logs <agent-id> <stack-name>` - Stream logs from a stack
+
+### Container Management
+- `mandau container exec <agent> <container> <command> [args...]` - Execute command in container
+- `mandau container list <agent>` - List containers on an agent
+- `mandau container logs <agent> <container>` - Get container logs
+- `mandau container start <agent> <container>` - Start a container
+- `mandau container stop <agent> <container>` - Stop a container
+
+### Service Management
+- `mandau services nginx create-proxy <agent> <domain> <upstream> <port>` - Create nginx reverse proxy
+- `mandau services nginx list <agent>` - List nginx virtual hosts
+- `mandau services systemd start <agent> <service>` - Start systemd service
+- `mandau services systemd status <agent> <service>` - Get systemd service status
+- `mandau services ssl obtain <agent> <domain> <email>` - Obtain SSL certificate
+- `mandau services ssl renew-all <agent>` - Renew all SSL certificates
+- `mandau services firewall allow-port <agent> <port> <protocol>` - Allow port through firewall
+- `mandau services firewall deny-port <agent> <port> <protocol>` - Deny port through firewall
+
+### Plugin Management
+- `mandau plugins secrets get <key>` - Get a secret value
+- `mandau plugins secrets set <key> <value>` - Set a secret value
+- `mandau plugins secrets delete <key>` - Delete a secret
+- `mandau plugins auth status` - Check authentication status
+- `mandau plugins auth list-users` - List users
+- `mandau plugins audit list` - List audit logs
+- `mandau plugins audit query <filter>` - Query audit logs with filter
 ```
 
 ## 🤝 Contributing

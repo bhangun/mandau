@@ -4,7 +4,7 @@
 // - protoc             v6.33.2
 // source: api/v1/agent.proto
 
-package agentv1
+package v1
 
 import (
 	context "context"
