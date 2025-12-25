@@ -81,6 +81,10 @@ jobs:
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/windows-amd64/mandau-agent.exe ./cmd/mandau-agent
           zip dist/mandau-windows-amd64-${{ steps.tag.outputs.version }}.zip -j build/windows-amd64/mandau.exe build/windows-amd64/mandau-core.exe build/windows-amd64/mandau-agent.exe
 
+      - name: Copy install script to dist
+        run: |
+          cp scripts/install.sh dist/ || echo "install.sh not found in scripts/ directory"
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -94,11 +98,12 @@ jobs:
             dist/mandau-darwin-amd64-*.tar.gz
             dist/mandau-darwin-arm64-*.tar.gz
             dist/mandau-windows-amd64-*.zip
+            dist/install.sh
           body: |
             ## Mandau ${{ steps.tag.outputs.tag }}
 
             This release includes the following binaries for different platforms:
-            
+
             - Linux AMD64
             - Linux ARM64
             - macOS AMD64
@@ -107,7 +112,13 @@ jobs:
 
             ### Installation
 
-            Download the appropriate archive for your platform and extract the binaries.
+            You can install Mandau using the installation script:
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | bash
+            ```
+
+            Or download the appropriate archive for your platform and extract the binaries.
 
             ### Changelog
 
