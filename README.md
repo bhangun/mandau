@@ -162,7 +162,32 @@ make certs
 
 ### 3. Installation Options
 
-#### Option A: Install from Binary Release (Recommended)
+#### Option A: Install using curl (Recommended)
+
+Install Mandau directly using the curl command. This method automatically detects your platform and installs the appropriate binaries.
+
+**Important**: The installation requires sudo privileges to install to `/usr/local/bin/`.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | sudo bash
+```
+
+**What the installation script does:**
+- Detects your operating system and architecture (Linux/macOS: amd64/arm64, Windows: amd64)
+- Fetches the latest release version from GitHub API
+- Downloads the appropriate binary package for your platform
+- Extracts and makes binaries executable
+- Installs `mandau`, `mandau-core`, and `mandau-agent` to `/usr/local/bin/`
+
+**Alternative curl command with explicit sudo:**
+```bash
+# If the pipe method doesn't work, download and run separately:
+curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh -o install.sh
+sudo bash install.sh
+rm install.sh
+```
+
+#### Option B: Install from Binary Release (Manual)
 
 Download the appropriate binary package for your platform from the [releases page](https://github.com/bhangun/mandau/releases). Each release includes pre-built static binaries for:
 
@@ -170,22 +195,16 @@ Download the appropriate binary package for your platform from the [releases pag
 - macOS AMD64/ARM64
 - Windows AMD64
 
-**Quick Install Script:**
-```bash
-# Download and run the installation script (Linux/macOS)
-curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | bash
-```
-
 **Manual Installation for Linux/macOS:**
 ```bash
 # Download and extract the archive for your platform
 # Example for Linux AMD64:
-VERSION=v1.0.0  # Replace with the latest version
+VERSION=v0.0.6  # Replace with the latest version from https://github.com/bhangun/mandau/releases
 wget https://github.com/bhangun/mandau/releases/download/${VERSION}/mandau-linux-amd64-${VERSION}.tar.gz
 tar -xzf mandau-linux-amd64-${VERSION}.tar.gz
 
 # Make binaries executable and move to PATH
-chmod +x mandau mandau-core mandau-agent
+sudo chmod +x mandau mandau-core mandau-agent
 sudo mv mandau mandau-core mandau-agent /usr/local/bin/
 ```
 
@@ -193,7 +212,7 @@ sudo mv mandau mandau-core mandau-agent /usr/local/bin/
 ```powershell
 # Download the zip file for Windows AMD64 from the releases page
 # Example using PowerShell:
-$version = "v1.0.0"  # Replace with the latest version
+$version = "v0.0.6"  # Replace with the latest version
 $downloadUrl = "https://github.com/bhangun/mandau/releases/download/$version/mandau-windows-amd64-$version.zip"
 $outputPath = "$env:TEMP\mandau-windows-amd64-$version.zip"
 Invoke-WebRequest -Uri $downloadUrl -OutFile $outputPath
@@ -204,16 +223,110 @@ Expand-Archive -Path $outputPath -DestinationPath "$env:TEMP\mandau"
 # Or add the extracted directory to your PATH environment variable
 ```
 
-#### Option B: Build from Source (Development)
+#### Option C: Build from Source (Development)
 
 ```bash
+git clone https://github.com/bhangun/mandau.git
+cd mandau
 make build
+sudo make install
 ```
 
-### 4. Generate Certificates
+**Build Requirements:**
+- Go 1.21 or higher
+- protoc (Protocol Buffers compiler) for generating gRPC code
+- Docker (for testing)
+
+### 4. Post-Installation Setup
+
+After installing Mandau, you need to set up certificates and configure the services.
+
+#### Generate Certificates
+
+Mandau uses mTLS (mutual TLS) for secure communication between components. Generate certificates for Core, Agent, and CLI:
 
 ```bash
+# If you built from source, you can generate certificates directly:
 make certs
+
+# If you installed via curl or manual download, you'll need to get the certificate generation script:
+mkdir -p ~/mandau-setup
+cd ~/mandau-setup
+curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/generate-certs.sh -o generate-certs.sh
+chmod +x generate-certs.sh
+./generate-certs.sh ./certs
+```
+
+This creates the following certificates in the `./certs` directory:
+- `ca.crt` and `ca.key` - Certificate Authority
+- `core.crt` and `core.key` - Core service certificate
+- `agent.crt` and `agent.key` - Agent service certificate
+- `client.crt` and `client.key` - CLI client certificate
+
+#### Configure Mandau Core
+
+The Core service manages agents and provides the API endpoint. Create a service configuration:
+
+```bash
+# Create directories for configuration
+sudo mkdir -p /etc/mandau
+sudo mkdir -p ~/mandau-certs
+
+# Copy certificates to appropriate location
+cp ./certs/* ~/mandau-certs/
+```
+
+**Start Core Service:**
+```bash
+mandau-core \
+  --listen :8443 \
+  --cert ~/mandau-certs/core.crt \
+  --key ~/mandau-certs/core.key \
+  --ca ~/mandau-certs/ca.crt
+```
+
+#### Configure Mandau Agent
+
+The Agent runs on each Docker host and executes commands:
+
+```bash
+# Create stacks directory for compose files
+mkdir -p ~/mandau-stacks
+
+mandau-agent \
+  --server localhost:8443 \
+  --cert ~/mandau-certs/agent.crt \
+  --key ~/mandau-certs/agent.key \
+  --ca ~/mandau-certs/ca.crt \
+  --stack-root ~/mandau-stacks
+```
+
+#### Configure CLI Authentication
+
+You can use either environment variables or command-line flags for CLI authentication:
+
+**Option A: Using Environment Variables**
+```bash
+export MANDAU_SERVER=localhost:8443
+export MANDAU_CERT=~/mandau-certs/client.crt
+export MANDAU_KEY=~/mandau-certs/client.key
+export MANDAU_CA=~/mandau-certs/ca.crt
+```
+
+**Option B: Using Command-Line Flags**
+```bash
+mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt --server localhost:8443 [command]
+```
+
+**Option C: Using Configuration File**
+Create a configuration file at `~/.config/mandau/config.yaml`:
+
+```yaml
+server: "localhost:8443"
+cert: "~/mandau-certs/client.crt"
+key: "~/mandau-certs/client.key"
+ca: "~/mandau-certs/ca.crt"
+timeout: "30s"
 ```
 
 ### 5. Run with Enhanced Reliability (Recommended)
@@ -221,6 +334,10 @@ make certs
 For development with automatic restarts and connection recovery, use the enhanced runner:
 
 ```bash
+# If you have the source code, clone it to get the runner script:
+git clone https://github.com/bhangun/mandau.git
+cd mandau
+
 # Clean up any stale processes first
 ./run-dev.sh --clean
 
@@ -232,80 +349,222 @@ For development with automatic restarts and connection recovery, use the enhance
 
 Or run manually with proper process management:
 
-### 5a. Run Core
+#### 5a. Run Core
 
 ```bash
-./bin/mandau-core \
+mandau-core \
   --listen :8443 \
-  --cert ./certs/core.crt \
-  --key ./certs/core.key \
-  --ca ./certs/ca.crt
+  --cert ~/mandau-certs/core.crt \
+  --key ~/mandau-certs/core.key \
+  --ca ~/mandau-certs/ca.crt
 ```
 
-### 5b. Run Agent
+#### 5b. Run Agent
 
 ```bash
-./bin/mandau-agent \
+mandau-agent \
   --server localhost:8443 \
-  --cert ./certs/agent.crt \
-  --key ./certs/agent.key \
-  --ca ./certs/ca.crt \
-  --stack-root ./stacks
+  --cert ~/mandau-certs/agent.crt \
+  --key ~/mandau-certs/agent.key \
+  --ca ~/mandau-certs/ca.crt \
+  --stack-root ~/mandau-stacks
 ```
 
 ### 6. Use CLI
 
+After installation, you can use the Mandau CLI with your certificates.
+
 ```bash
 # Option 1: Using environment variables
 export MANDAU_SERVER=localhost:8443
-export MANDAU_CERT=./certs/client.crt
-export MANDAU_KEY=./certs/client.key
-export MANDAU_CA=./certs/ca.crt
+export MANDAU_CERT=~/mandau-certs/client.crt
+export MANDAU_KEY=~/mandau-certs/client.key
+export MANDAU_CA=~/mandau-certs/ca.crt
 
 # List agents
-./bin/mandau agent list
+mandau agent list
 
 # Deploy a stack
-./bin/mandau stack apply agent-001 web ./compose.yaml
+mandau stack apply agent-001 web ./compose.yaml
 
 # Stream logs
-./bin/mandau stack logs agent-001 web
+mandau stack logs agent-001 web
 
 # Execute command in container
-./bin/mandau container exec agent-001 web-container /bin/sh
+mandau container exec agent-001 web-container /bin/sh
 
 # Manage services
-./bin/mandau services nginx create-proxy agent-001 example.com http://localhost:3000 80
-./bin/mandau services systemd start agent-001 myservice
-./bin/mandau services firewall allow-port agent-001 80 tcp
+mandau services nginx create-proxy agent-001 example.com http://localhost:3000 80
+mandau services systemd start agent-001 myservice
+mandau services firewall allow-port agent-001 80 tcp
 
 # Manage plugins
-./bin/mandau plugins secrets get my-secret
-./bin/mandau plugins auth status
+mandau plugins secrets get my-secret
+mandau plugins auth status
 ```
 
 ```bash
 # Option 2: Using command-line flags
-./bin/mandau --server localhost:8443 --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt agent list
+mandau --server localhost:8443 --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt agent list
 
 # Deploy a stack
-./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt stack apply agent-001 web ./compose.yaml
+mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt stack apply agent-001 web ./compose.yaml
 
 # Stream logs
-./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt stack logs agent-001 web
+mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt stack logs agent-001 web
 
 # Execute command in container
-./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt container exec agent-001 web-container /bin/sh
+mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt container exec agent-001 web-container /bin/sh
 
 # Manage services
-./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt services nginx create-proxy agent-001 example.com http://localhost:3000 80
-./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt services systemd start agent-001 myservice
-./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt services firewall allow-port agent-001 80 tcp
+mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt services nginx create-proxy agent-001 example.com http://localhost:3000 80
+mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt services systemd start agent-001 myservice
+mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt services firewall allow-port agent-001 80 tcp
 
 # Manage plugins
-./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt plugins secrets get my-secret
-./bin/mandau --cert ./certs/client.crt --key ./certs/client.key --ca ./certs/ca.crt plugins auth status
+mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt plugins secrets get my-secret
+mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt plugins auth status
 ```
+
+### 7. Service Management
+
+#### Using Systemd (Recommended for Production)
+
+For production deployments, use the provided systemd service files:
+
+1. Copy the binaries and service files to appropriate locations
+2. Enable and start the services:
+
+```bash
+# Copy binaries (if not already installed system-wide)
+sudo cp /usr/local/bin/mandau-core /usr/local/bin/mandau-agent /usr/local/bin/mandau /usr/local/bin/
+# Or if you have the source:
+sudo cp bin/mandau-core /usr/local/bin/
+sudo cp bin/mandau-agent /usr/local/bin/
+sudo cp bin/mandau /usr/local/bin/
+
+# Copy service files (from source or create manually)
+# You can create these files manually:
+
+# Create mandau-core.service
+sudo tee /etc/systemd/system/mandau-core.service > /dev/null <<EOF
+[Unit]
+Description=Mandau Core Service
+After=network.target
+
+[Service]
+Type=simple
+User=$(whoami)
+ExecStart=/usr/local/bin/mandau-core --listen :8443 --cert ~/mandau-certs/core.crt --key ~/mandau-certs/core.key --ca ~/mandau-certs/ca.crt
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Create mandau-agent.service
+sudo tee /etc/systemd/system/mandau-agent.service > /dev/null <<EOF
+[Unit]
+Description=Mandau Agent Service
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=$(whoami)
+ExecStart=/usr/local/bin/mandau-agent --server localhost:8443 --cert ~/mandau-certs/agent.crt --key ~/mandau-certs/agent.key --ca ~/mandau-certs/ca.crt --stack-root ~/mandau-stacks
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd configuration
+sudo systemctl daemon-reload
+
+# Enable services to start on boot
+sudo systemctl enable mandau-core
+sudo systemctl enable mandau-agent
+
+# Start the services
+sudo systemctl start mandau-core
+sudo systemctl start mandau-agent
+
+# Check service status
+sudo systemctl status mandau-core
+sudo systemctl status mandau-agent
+```
+
+#### Using Docker (Alternative)
+
+You can also run Mandau services in Docker containers:
+
+```bash
+# Pull the latest images
+docker pull ghcr.io/bhangun/mandau-core:latest
+docker pull ghcr.io/bhangun/mandau-agent:latest
+
+# Run Core service
+docker run -d \
+  --name mandau-core \
+  -p 8443:8443 \
+  -v ~/mandau-certs:/certs:ro \
+  -v /etc/mandau:/config:ro \
+  ghcr.io/bhangun/mandau-core:latest \
+  --listen :8443 \
+  --cert /certs/core.crt \
+  --key /certs/core.key \
+  --ca /certs/ca.crt
+
+# Run Agent service
+docker run -d \
+  --name mandau-agent \
+  --restart unless-stopped \
+  -v ~/mandau-certs:/certs:ro \
+  -v ~/mandau-stacks:/stacks \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  ghcr.io/bhangun/mandau-agent:latest \
+  --server mandau-core:8443 \
+  --cert /certs/agent.crt \
+  --key /certs/agent.key \
+  --ca /certs/ca.crt \
+  --stack-root /stacks
+```
+
+### 8. Troubleshooting
+
+#### Common Issues
+
+1. **Connection refused errors**: Make sure Core service is running and accessible
+2. **Certificate errors**: Verify certificates are valid and properly configured
+3. **Permission denied**: Check file permissions and certificate paths
+4. **Agent not found**: Ensure Agent is properly registered with Core
+5. **Installation fails without sudo**: The installation requires sudo to write to `/usr/local/bin/`
+
+#### Verify Installation
+
+```bash
+# Check if binaries are installed
+which mandau mandau-core mandau-agent
+
+# Check versions
+mandau --help
+
+# Test connection to Core (if running)
+mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt agent list
+```
+
+#### Log Files
+
+- Core logs: Check the terminal where Core is running or systemd logs: `sudo journalctl -u mandau-core -f`
+- Agent logs: Check the terminal where Agent is running or systemd logs: `sudo journalctl -u mandau-agent -f`
+- CLI logs: Add `--verbose` flag for more detailed output
 
 ## 🔒 Security Model
 
@@ -683,10 +942,12 @@ To create a new release:
    - `mandau-darwin-arm64-v1.0.0.tar.gz`
    - `mandau-windows-amd64-v1.0.0.zip`
 
-4. **Easy Installation Script**: Users can install Mandau using the quick installation script:
+4. **Easy Installation Script**: Users can install Mandau using the quick installation script (requires sudo):
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | sudo bash
    ```
+
+   The installation script will be included in GitHub releases and is also available at the raw content URL.
 
 ### Manual Release Trigger
 

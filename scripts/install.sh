@@ -143,10 +143,23 @@ download_and_install() {
         else
             SUDO=""
         fi
-        
+
+        # Verify binaries exist before installing
+        if [ ! -f "mandau" ] || [ ! -f "mandau-core" ] || [ ! -f "mandau-agent" ]; then
+            print_error "Required binaries not found in extracted archive. Available files:"
+            ls -la
+            cd - >/dev/null
+            rm -rf "$TEMP_DIR"
+            exit 1
+        fi
+
         # Install binaries
-        if [ -n "$SUDO" ]; then
+        if [ -n "$SUDO" ] && [ "$EUID" -ne 0 ]; then
+            # Use sudo if available and not running as root
             $SUDO install -m 755 mandau mandau-core mandau-agent /usr/local/bin/
+        elif [ "$EUID" -eq 0 ]; then
+            # Running as root (e.g., via curl | sudo bash), install directly
+            install -m 755 mandau mandau-core mandau-agent /usr/local/bin/
         else
             # Try to install without sudo (might fail)
             install -m 755 mandau mandau-core mandau-agent /usr/local/bin/ 2>/dev/null || {
