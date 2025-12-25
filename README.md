@@ -170,7 +170,13 @@ Download the appropriate binary package for your platform from the [releases pag
 - macOS AMD64/ARM64
 - Windows AMD64
 
-**For Linux/macOS:**
+**Quick Install Script:**
+```bash
+# Download and run the installation script (Linux/macOS)
+curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | bash
+```
+
+**Manual Installation for Linux/macOS:**
 ```bash
 # Download and extract the archive for your platform
 # Example for Linux AMD64:
@@ -676,6 +682,11 @@ To create a new release:
    - `mandau-darwin-amd64-v1.0.0.tar.gz`
    - `mandau-darwin-arm64-v1.0.0.tar.gz`
    - `mandau-windows-amd64-v1.0.0.zip`
+
+4. **Easy Installation Script**: Users can install Mandau using the quick installation script:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | bash
+   ```
 
 ### Manual Release Trigger
 

@@ -15,7 +15,13 @@ Download the appropriate binary package for your platform from the [releases pag
 - macOS AMD64/ARM64
 - Windows AMD64
 
-**For Linux/macOS:**
+**Quick Install Script:**
+```bash
+# Download and run the installation script (Linux/macOS)
+curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | bash
+```
+
+**Manual Installation for Linux/macOS:**
 ```bash
 # Download and extract the archive for your platform
 # Example for Linux AMD64:
