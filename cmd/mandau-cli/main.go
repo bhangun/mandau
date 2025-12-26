@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	version = "unknown" // Will be set by build process
+	version = "0.0.13" // Will be set by build process
 
 	cli     = &CLI{}
 	rootCmd = &cobra.Command{
