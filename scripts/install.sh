@@ -90,13 +90,15 @@ download_and_install() {
     local arch=$3
 
     # Construct download URL based on platform
+    # The version from GitHub API includes 'v' prefix (e.g., v0.0.7) but release assets use version without 'v'
+    VERSION_NO_V="${version#v}"  # Strip the 'v' prefix for the filename
     if [ "$os" = "windows" ]; then
         # Windows uses .zip format
-        FILENAME="mandau-windows-${arch}-${version}.zip"
+        FILENAME="mandau-windows-${arch}-${VERSION_NO_V}.zip"
         URL="https://github.com/bhangun/mandau/releases/download/${version}/${FILENAME}"
     else
         # Linux/macOS use .tar.gz format
-        FILENAME="mandau-${os}-${arch}-${version}.tar.gz"
+        FILENAME="mandau-${os}-${arch}-${VERSION_NO_V}.tar.gz"
         URL="https://github.com/bhangun/mandau/releases/download/${version}/${FILENAME}"
     fi
 
