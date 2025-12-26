@@ -300,11 +300,12 @@ download_and_install() {
     # Create config directory with appropriate permissions
     mkdir -p "$CONFIG_DIR"
 
-    # Create default config file
+    # Create default config file for CLI client
+    # By default, assume client installation pointing to a remote server
     cat > "$CONFIG_DIR/config.yaml" << EOF
-# Mandau CLI Configuration
+# Mandau CLI Client Configuration
 server:
-  listen_addr: "localhost:8443"
+  listen_addr: "localhost:8443"  # Change this to your remote server address
   tls:
     cert_path: "$ORIGINAL_HOME/mandau-certs/client.crt"
     key_path: "$ORIGINAL_HOME/mandau-certs/client.key"
@@ -312,7 +313,10 @@ server:
     min_version: "TLS1.3"
     server_name: "mandau-core"
 timeout: "30s"
-# Note: Certificates need to be generated separately using the generate-certs.sh script
+# Note:
+# - For client usage, change listen_addr to your remote server (e.g., "myserver.com:8443")
+# - Certificates need to be generated separately using the generate-certs.sh script
+# - Client certificates must be signed by the same CA as the remote server
 EOF
 
     # Set appropriate permissions for the config directory and file
@@ -320,8 +324,10 @@ EOF
     chmod 700 "$CONFIG_DIR"
     chmod 600 "$CONFIG_DIR/config.yaml"
 
-    print_success "Default configuration created at $CONFIG_DIR/config.yaml"
+    print_success "Default client configuration created at $CONFIG_DIR/config.yaml"
+    print_status "Note: Update server address to point to your remote Mandau Core instance"
     print_status "Note: You need to generate certificates in ~/mandau-certs/ directory for full functionality."
+    print_status "For remote server configuration, use the same CA certificates."
 
     # Return to original directory and cleanup
     cd - >/dev/null

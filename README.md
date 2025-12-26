@@ -239,7 +239,26 @@ sudo make install
 
 ### 4. Post-Installation Setup
 
-After installing Mandau, you need to set up certificates. The installation automatically creates a default configuration file at `~/.mandau/config.yaml` that points to the expected certificate locations.
+After installing Mandau, you need to set up certificates. The installation automatically creates a default client configuration file at `~/.mandau/config.yaml` that points to the expected certificate locations.
+
+#### Client vs Server Installation
+
+**Client Installation** (for connecting to remote Mandau Core):
+- Use the curl installation method to install the CLI on your local machine
+- Update the server address in `~/.mandau/config.yaml` to point to your remote Mandau Core instance
+- Ensure you have the appropriate client certificates signed by the same CA as the remote server
+
+**Server Installation** (on infrastructure to be managed):
+- Deploy `mandau-core` and `mandau-agent` binaries to your servers
+- Configure certificates for server authentication
+- Set up agents on each Docker host to be managed
+
+For client usage, update the configuration to point to your remote server:
+```bash
+# Edit the configuration file to point to your remote server
+nano ~/.mandau/config.yaml
+# Change "listen_addr: localhost:8443" to "listen_addr: your-server.com:8443"
+```
 
 #### Generate Certificates
 
