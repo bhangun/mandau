@@ -95,14 +95,49 @@ func main() {
 }
 
 func (c *CLI) connect(cmd *cobra.Command) error {
-	// Try to load configuration from file first
-	configPath := config.GetConfigPath("config/core/config.yaml")
-	cfg, err := config.LoadCoreConfig(configPath)
-	if err != nil {
-		// Config file not found, proceed with command-line flags/env vars
-		fmt.Printf("Config file not found at %s, using command-line flags/environment variables\n", configPath)
-	} else {
-		fmt.Printf("Loaded configuration from %s\n", configPath)
+	// Try to load configuration from standard locations in order of preference
+	var cfg *config.CoreConfig
+	var err error
+
+	// First, try the environment variable if set
+	configPath := config.GetConfigPath("") // This will return env var value or empty string
+	if configPath != "" {
+		cfg, err = config.LoadCoreConfig(configPath)
+		if err != nil {
+			fmt.Printf("Config file not found at %s, trying standard locations\n", configPath)
+		} else {
+			fmt.Printf("Loaded configuration from %s\n", configPath)
+		}
+	}
+
+	// If not found via env var or env var wasn't set, try standard locations
+	if cfg == nil {
+		// Try ~/.mandau/config.yaml (our new standard location)
+		homeDir, errHome := os.UserHomeDir()
+		if errHome == nil {
+			standardConfigPath := fmt.Sprintf("%s/.mandau/config.yaml", homeDir)
+			cfg, err = config.LoadCoreConfig(standardConfigPath)
+			if err != nil {
+				fmt.Printf("Config file not found at %s, trying command-line flags/environment variables\n", standardConfigPath)
+			} else {
+				fmt.Printf("Loaded configuration from %s\n", standardConfigPath)
+			}
+		}
+	}
+
+	// If still not found, try the old default location
+	if cfg == nil {
+		configPath = "config/core/config.yaml"
+		cfg, err = config.LoadCoreConfig(configPath)
+		if err != nil {
+			// Config file not found, proceed with command-line flags/env vars
+			fmt.Printf("Config file not found at %s, using command-line flags/environment variables\n", configPath)
+		} else {
+			fmt.Printf("Loaded configuration from %s\n", configPath)
+		}
+	}
+
+	if cfg != nil {
 		c.config = cfg
 	}
 
