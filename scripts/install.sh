@@ -3,7 +3,8 @@
 # Mandau Installation Script
 # This script automatically detects your platform and installs the appropriate Mandau binaries
 
-set -e
+# Don't exit immediately on error - we'll handle errors explicitly
+# set -e is too aggressive for this script
 
 # Colors for output
 RED='\033[0;31m'
@@ -105,7 +106,8 @@ download_and_install() {
     TEMP_DIR=$(mktemp -d)
     cd "$TEMP_DIR"
     
-    # Download the file
+    # Download the file - temporarily disable set -e for this operation
+    set +e
     if command -v wget >/dev/null 2>&1; then
         print_status "Using wget to download $URL"
         wget -q "$URL" -O "$FILENAME"
@@ -119,6 +121,7 @@ download_and_install() {
         rm -rf "$TEMP_DIR"
         exit 1
     fi
+    set -e
 
     if [ $DOWNLOAD_STATUS -ne 0 ]; then
         print_error "Failed to download $FILENAME (exit code: $DOWNLOAD_STATUS)"
@@ -133,6 +136,7 @@ download_and_install() {
 
     # Extract the archive
     print_status "Extracting $FILENAME..."
+    set +e
     if [[ "$FILENAME" == *.tar.gz ]]; then
         tar -xzf "$FILENAME"
         EXTRACT_STATUS=$?
@@ -143,6 +147,7 @@ download_and_install() {
         print_error "Unknown archive format: $FILENAME"
         EXTRACT_STATUS=1
     fi
+    set -e
 
     if [ $EXTRACT_STATUS -ne 0 ]; then
         print_error "Failed to extract $FILENAME (exit code: $EXTRACT_STATUS)"
@@ -158,8 +163,10 @@ download_and_install() {
     # Make binaries executable (not needed for Windows)
     if [ "$os" != "windows" ]; then
         print_status "Making binaries executable..."
+        set +e
         chmod +x mandau mandau-core mandau-agent
         CHMOD_STATUS=$?
+        set -e
         if [ $CHMOD_STATUS -ne 0 ]; then
             print_error "Failed to make binaries executable (exit code: $CHMOD_STATUS)"
             ls -la
@@ -190,37 +197,80 @@ download_and_install() {
         # Install binaries
         if [ -n "$SUDO" ] && [ "$EUID" -ne 0 ]; then
             # Use sudo if available and not running as root
-            $SUDO install -m 755 mandau mandau-core mandau-agent /usr/local/bin/ || {
+            set +e
+            $SUDO install -m 755 mandau mandau-core mandau-agent /usr/local/bin/
+            INSTALL_STATUS=$?
+            set -e
+            if [ $INSTALL_STATUS -ne 0 ]; then
                 # Fallback to cp if install command fails
                 print_warning "install command failed, trying cp as fallback..."
+                set +e
                 $SUDO cp mandau mandau-core mandau-agent /usr/local/bin/
                 $SUDO chmod 755 /usr/local/bin/mandau /usr/local/bin/mandau-core /usr/local/bin/mandau-agent
-            }
+                CP_STATUS=$?
+                set -e
+                if [ $CP_STATUS -ne 0 ]; then
+                    print_error "Both install and cp commands failed"
+                    cd - >/dev/null
+                    rm -rf "$TEMP_DIR"
+                    exit 1
+                fi
+            fi
         elif [ "$EUID" -eq 0 ]; then
             # Running as root (e.g., via curl | sudo bash), install directly
-            install -m 755 mandau mandau-core mandau-agent /usr/local/bin/ || {
+            set +e
+            install -m 755 mandau mandau-core mandau-agent /usr/local/bin/
+            INSTALL_STATUS=$?
+            set -e
+            if [ $INSTALL_STATUS -ne 0 ]; then
                 # Fallback to cp if install command fails
                 print_warning "install command failed, trying cp as fallback..."
+                set +e
                 cp mandau mandau-core mandau-agent /usr/local/bin/
                 chmod 755 /usr/local/bin/mandau /usr/local/bin/mandau-core /usr/local/bin/mandau-agent
-            }
+                CP_STATUS=$?
+                set -e
+                if [ $CP_STATUS -ne 0 ]; then
+                    print_error "Both install and cp commands failed"
+                    cd - >/dev/null
+                    rm -rf "$TEMP_DIR"
+                    exit 1
+                fi
+            fi
         else
             # Try to install without sudo (might fail)
-            install -m 755 mandau mandau-core mandau-agent /usr/local/bin/ 2>/dev/null || {
+            set +e
+            install -m 755 mandau mandau-core mandau-agent /usr/local/bin/ 2>/dev/null
+            INSTALL_STATUS=$?
+            set -e
+            if [ $INSTALL_STATUS -ne 0 ]; then
                 # Fallback to cp if install command fails
                 print_warning "install command failed, trying cp as fallback..."
                 if [ -n "$SUDO" ]; then
+                    set +e
                     $SUDO cp mandau mandau-core mandau-agent /usr/local/bin/
                     $SUDO chmod 755 /usr/local/bin/mandau /usr/local/bin/mandau-core /usr/local/bin/mandau-agent
+                    CP_STATUS=$?
+                    set -e
+                    if [ $CP_STATUS -ne 0 ]; then
+                        print_error "Both install and cp commands failed"
+                        cd - >/dev/null
+                        rm -rf "$TEMP_DIR"
+                        exit 1
+                    fi
                 else
-                    cp mandau mandau-core mandau-agent /usr/local/bin/ 2>/dev/null || {
+                    set +e
+                    cp mandau mandau-core mandau-agent /usr/local/bin/ 2>/dev/null
+                    CP_STATUS=$?
+                    set -e
+                    if [ $CP_STATUS -ne 0 ]; then
                         print_error "Installation to /usr/local/bin requires sudo. Please run with sudo or install manually."
                         cd - >/dev/null
                         rm -rf "$TEMP_DIR"
                         exit 1
-                    }
+                    fi
                 fi
-            }
+            fi
         fi
     else
         # Windows: Copy to a user-accessible location
