@@ -156,17 +156,36 @@ download_and_install() {
         # Install binaries
         if [ -n "$SUDO" ] && [ "$EUID" -ne 0 ]; then
             # Use sudo if available and not running as root
-            $SUDO install -m 755 mandau mandau-core mandau-agent /usr/local/bin/
+            $SUDO install -m 755 mandau mandau-core mandau-agent /usr/local/bin/ || {
+                # Fallback to cp if install command fails
+                print_warning "install command failed, trying cp as fallback..."
+                $SUDO cp mandau mandau-core mandau-agent /usr/local/bin/
+                $SUDO chmod 755 /usr/local/bin/mandau /usr/local/bin/mandau-core /usr/local/bin/mandau-agent
+            }
         elif [ "$EUID" -eq 0 ]; then
             # Running as root (e.g., via curl | sudo bash), install directly
-            install -m 755 mandau mandau-core mandau-agent /usr/local/bin/
+            install -m 755 mandau mandau-core mandau-agent /usr/local/bin/ || {
+                # Fallback to cp if install command fails
+                print_warning "install command failed, trying cp as fallback..."
+                cp mandau mandau-core mandau-agent /usr/local/bin/
+                chmod 755 /usr/local/bin/mandau /usr/local/bin/mandau-core /usr/local/bin/mandau-agent
+            }
         else
             # Try to install without sudo (might fail)
             install -m 755 mandau mandau-core mandau-agent /usr/local/bin/ 2>/dev/null || {
-                print_error "Installation to /usr/local/bin requires sudo. Please run with sudo or install manually."
-                cd - >/dev/null
-                rm -rf "$TEMP_DIR"
-                exit 1
+                # Fallback to cp if install command fails
+                print_warning "install command failed, trying cp as fallback..."
+                if [ -n "$SUDO" ]; then
+                    $SUDO cp mandau mandau-core mandau-agent /usr/local/bin/
+                    $SUDO chmod 755 /usr/local/bin/mandau /usr/local/bin/mandau-core /usr/local/bin/mandau-agent
+                else
+                    cp mandau mandau-core mandau-agent /usr/local/bin/ 2>/dev/null || {
+                        print_error "Installation to /usr/local/bin requires sudo. Please run with sudo or install manually."
+                        cd - >/dev/null
+                        rm -rf "$TEMP_DIR"
+                        exit 1
+                    }
+                fi
             }
         fi
     else
@@ -201,6 +220,23 @@ main() {
         print_success "Mandau CLI is available: $(mandau --version 2>/dev/null || echo "version info not available")"
     else
         print_warning "Mandau CLI not found in PATH after installation"
+        print_info "Checking if binaries exist in /usr/local/bin/:"
+        if [ -f "/usr/local/bin/mandau" ]; then
+            print_info "  - mandau binary exists in /usr/local/bin/"
+            ls -la /usr/local/bin/mandau 2>/dev/null || echo "  - Cannot access /usr/local/bin/mandau"
+        else
+            print_info "  - mandau binary does NOT exist in /usr/local/bin/"
+        fi
+        if [ -f "/usr/local/bin/mandau-core" ]; then
+            print_info "  - mandau-core binary exists in /usr/local/bin/"
+        else
+            print_info "  - mandau-core binary does NOT exist in /usr/local/bin/"
+        fi
+        if [ -f "/usr/local/bin/mandau-agent" ]; then
+            print_info "  - mandau-agent binary exists in /usr/local/bin/"
+        else
+            print_info "  - mandau-agent binary does NOT exist in /usr/local/bin/"
+        fi
     fi
 
     print_status "Installation complete! Run 'mandau --help' to get started."
