@@ -107,32 +107,66 @@ download_and_install() {
     
     # Download the file
     if command -v wget >/dev/null 2>&1; then
+        print_status "Using wget to download $URL"
         wget -q "$URL" -O "$FILENAME"
+        DOWNLOAD_STATUS=$?
     elif command -v curl >/dev/null 2>&1; then
+        print_status "Using curl to download $URL"
         curl -fsSL -o "$FILENAME" "$URL"
+        DOWNLOAD_STATUS=$?
     else
         print_error "Neither wget nor curl is available"
+        rm -rf "$TEMP_DIR"
         exit 1
     fi
 
-    if [ $? -ne 0 ]; then
-        print_error "Failed to download $FILENAME"
+    if [ $DOWNLOAD_STATUS -ne 0 ]; then
+        print_error "Failed to download $FILENAME (exit code: $DOWNLOAD_STATUS)"
+        print_error "URL attempted: $URL"
+        ls -la "$TEMP_DIR"  # Show what's in the temp directory
         rm -rf "$TEMP_DIR"
         exit 1
     fi
 
     print_status "Downloaded $FILENAME successfully"
+    print_status "File size: $(ls -lah $FILENAME | awk '{print $5}')"
 
     # Extract the archive
+    print_status "Extracting $FILENAME..."
     if [[ "$FILENAME" == *.tar.gz ]]; then
         tar -xzf "$FILENAME"
+        EXTRACT_STATUS=$?
     elif [[ "$FILENAME" == *.zip ]]; then
         unzip -q "$FILENAME"
+        EXTRACT_STATUS=$?
+    else
+        print_error "Unknown archive format: $FILENAME"
+        EXTRACT_STATUS=1
     fi
+
+    if [ $EXTRACT_STATUS -ne 0 ]; then
+        print_error "Failed to extract $FILENAME (exit code: $EXTRACT_STATUS)"
+        ls -la  # Show contents after failed extraction
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+
+    print_status "Extraction completed successfully"
+    print_info "Contents of extraction directory:"
+    ls -la
 
     # Make binaries executable (not needed for Windows)
     if [ "$os" != "windows" ]; then
+        print_status "Making binaries executable..."
         chmod +x mandau mandau-core mandau-agent
+        CHMOD_STATUS=$?
+        if [ $CHMOD_STATUS -ne 0 ]; then
+            print_error "Failed to make binaries executable (exit code: $CHMOD_STATUS)"
+            ls -la
+            rm -rf "$TEMP_DIR"
+            exit 1
+        fi
+        print_status "Binaries made executable successfully"
     fi
 
     # Install to system location
