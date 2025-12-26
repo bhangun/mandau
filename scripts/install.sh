@@ -159,7 +159,7 @@ download_and_install() {
     fi
 
     print_status "Extraction completed successfully"
-    print_info "Contents of extraction directory:"
+    print_status "Contents of extraction directory:"
     ls -la
 
     # Make binaries executable (not needed for Windows)
@@ -306,22 +306,22 @@ main() {
         print_success "Mandau CLI is available: $(mandau --version 2>/dev/null || echo "version info not available")"
     else
         print_warning "Mandau CLI not found in PATH after installation"
-        print_info "Checking if binaries exist in /usr/local/bin/:"
+        print_status "Checking if binaries exist in /usr/local/bin/:"
         if [ -f "/usr/local/bin/mandau" ]; then
-            print_info "  - mandau binary exists in /usr/local/bin/"
+            print_status "  - mandau binary exists in /usr/local/bin/"
             ls -la /usr/local/bin/mandau 2>/dev/null || echo "  - Cannot access /usr/local/bin/mandau"
         else
-            print_info "  - mandau binary does NOT exist in /usr/local/bin/"
+            print_status "  - mandau binary does NOT exist in /usr/local/bin/"
         fi
         if [ -f "/usr/local/bin/mandau-core" ]; then
-            print_info "  - mandau-core binary exists in /usr/local/bin/"
+            print_status "  - mandau-core binary exists in /usr/local/bin/"
         else
-            print_info "  - mandau-core binary does NOT exist in /usr/local/bin/"
+            print_status "  - mandau-core binary does NOT exist in /usr/local/bin/"
         fi
         if [ -f "/usr/local/bin/mandau-agent" ]; then
-            print_info "  - mandau-agent binary exists in /usr/local/bin/"
+            print_status "  - mandau-agent binary exists in /usr/local/bin/"
         else
-            print_info "  - mandau-agent binary does NOT exist in /usr/local/bin/"
+            print_status "  - mandau-agent binary does NOT exist in /usr/local/bin/"
         fi
     fi
 
