@@ -300,23 +300,31 @@ download_and_install() {
     # Create config directory with appropriate permissions
     mkdir -p "$CONFIG_DIR"
 
-    # Create default config file for CLI client
-    # By default, assume client installation pointing to a remote server
+    # Create default config file for unified usage
     cat > "$CONFIG_DIR/config.yaml" << EOF
-# Mandau CLI Client Configuration
+# Mandau Unified Configuration
 server:
-  listen_addr: "localhost:8443"  # Change this to your remote server address
+  listen_addr: "localhost:8443"  # For core server: address to listen on; For client: remote server address
   tls:
-    cert_path: "$ORIGINAL_HOME/mandau-certs/client.crt"
-    key_path: "$ORIGINAL_HOME/mandau-certs/client.key"
+    cert_path: "$ORIGINAL_HOME/mandau-certs/core.crt"  # For core server: server cert; For client: client cert
+    key_path: "$ORIGINAL_HOME/mandau-certs/core.key"   # For core server: server key; For client: client key
     ca_path: "$ORIGINAL_HOME/mandau-certs/ca.crt"
     min_version: "TLS1.3"
     server_name: "mandau-core"
+agent:
+  server_connection:
+    core_addr: "localhost:8443"
+    tls:
+      cert_path: "$ORIGINAL_HOME/mandau-certs/agent.crt"  # Agent certificate to connect to core
+      key_path: "$ORIGINAL_HOME/mandau-certs/agent.key"
+      ca_path: "$ORIGINAL_HOME/mandau-certs/ca.crt"
+      min_version: "TLS1.3"
+      server_name: "mandau-core"
 timeout: "30s"
 # Note:
-# - For client usage, change listen_addr to your remote server (e.g., "myserver.com:8443")
+# - For client usage, update server.listen_addr to your remote server (e.g., "myserver.com:8443")
+# - For server usage, certificates need to match the component (core/agent/client)
 # - Certificates need to be generated separately using the generate-certs.sh script
-# - Client certificates must be signed by the same CA as the remote server
 EOF
 
     # Set appropriate permissions for the config directory and file

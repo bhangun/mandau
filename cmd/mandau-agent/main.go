@@ -36,6 +36,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+var version = "unknown" // Will be set by build process
+
 type Agent struct {
 	agentv1.UnimplementedAgentServiceServer
 	agentv1.UnimplementedStackServiceServer
@@ -69,6 +71,14 @@ type Config struct {
 }
 
 func main() {
+	// Check for version flag first
+	for _, arg := range os.Args[1:] {
+		if arg == "--version" || arg == "-version" || arg == "-v" {
+			fmt.Printf("mandau-agent version %s\n", version)
+			os.Exit(0)
+		}
+	}
+
 	// Parse only the config flag from command line args
 	// Skip the first argument (program name) and look for --config
 	args := os.Args[1:]
@@ -94,7 +104,7 @@ func main() {
 		homeDir, errHome := os.UserHomeDir()
 		if errHome == nil {
 			standardConfigPath := fmt.Sprintf("%s/.mandau/config.yaml", homeDir)
-			// For agent, we need to try loading as CoreConfig first since that's where the TLS settings are
+			// For agent, we need to try loading as CoreConfig first
 			coreCfg, err := config.LoadCoreConfig(standardConfigPath)
 			if err != nil {
 				fmt.Printf("Config file not found at %s, trying default location\n", standardConfigPath)
@@ -102,11 +112,24 @@ func main() {
 				fmt.Printf("Loaded configuration from %s\n", standardConfigPath)
 				// Convert CoreConfig to AgentConfig for TLS settings
 				agentConfig = config.CreateDefaultAgentConfig()
-				// Update TLS settings from the core config
-				agentConfig.ServerConnection.TLS.CertPath = coreCfg.Server.TLS.CertPath
-				agentConfig.ServerConnection.TLS.KeyPath = coreCfg.Server.TLS.KeyPath
-				agentConfig.ServerConnection.TLS.CAPath = coreCfg.Server.TLS.CAPath
-				agentConfig.ServerConnection.CoreAddr = coreCfg.Server.ListenAddr
+				// Try to use agent-specific settings first, then fall back to server settings
+				if coreCfg.AgentManagement != (config.AgentManagementConfig{}) && coreCfg.Server.TLS.CertPath != "" {
+					// If there's an agent section, use server connection settings from there
+					agentConfig.ServerConnection.CoreAddr = coreCfg.Server.ListenAddr
+					// Use the agent TLS settings if available
+					// Since the config structure is different, we'll try to get agent-specific paths from the unified config
+					// For now, we'll try to load the config file again with a more flexible approach
+					// Let's just use the core config values but adjust for agent usage
+					agentConfig.ServerConnection.TLS.CertPath = coreCfg.Server.TLS.CertPath
+					agentConfig.ServerConnection.TLS.KeyPath = coreCfg.Server.TLS.KeyPath
+					agentConfig.ServerConnection.TLS.CAPath = coreCfg.Server.TLS.CAPath
+				} else {
+					// Use server settings for agent connection to core server
+					agentConfig.ServerConnection.TLS.CertPath = coreCfg.Server.TLS.CertPath
+					agentConfig.ServerConnection.TLS.KeyPath = coreCfg.Server.TLS.KeyPath
+					agentConfig.ServerConnection.TLS.CAPath = coreCfg.Server.TLS.CAPath
+					agentConfig.ServerConnection.CoreAddr = coreCfg.Server.ListenAddr
+				}
 			}
 		}
 	}

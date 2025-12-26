@@ -10,8 +10,13 @@ import (
 	"github.com/bhangun/mandau/pkg/core"
 )
 
+var version = "unknown" // Will be set by build process
+
 
 func main() {
+	// Version flag
+	showVersion := flag.Bool("version", false, "Show version and exit")
+
 	// Configuration file path
 	configPath := flag.String("config", "config/core/config.yaml", "Configuration file path")
 
@@ -23,6 +28,12 @@ func main() {
 	pluginDir := flag.String("plugin-dir", "", "Plugin directory (overrides config file)")
 
 	flag.Parse()
+
+	// Check if version flag was set
+	if *showVersion {
+		fmt.Printf("mandau-core version %s\n", version)
+		os.Exit(0)
+	}
 
 	// Load configuration from file first
 	coreConfig := &core.CoreConfig{}
