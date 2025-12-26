@@ -34,15 +34,23 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels) for Docker
-        id: meta
+        id: meta_core
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_CORE }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_AGENT }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_CORE }}
           tags: |
             type=ref,event=tag
-            type=sha,prefix={{branch}}-
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta_agent
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_AGENT }}
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Core image
@@ -51,8 +59,8 @@ jobs:
           context: .
           file: ./Dockerfile.core
           push: true
-          tags: ${{ steps.meta.outputs.tags }}-core
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta_core.outputs.tags }}
+          labels: ${{ steps.meta_core.outputs.labels }}
 
       - name: Build and push Agent image
         uses: docker/build-push-action@v5
@@ -60,8 +68,8 @@ jobs:
           context: .
           file: ./Dockerfile.agent
           push: true
-          tags: ${{ steps.meta.outputs.tags }}-agent
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta_agent.outputs.tags }}
+          labels: ${{ steps.meta_agent.outputs.labels }}
 
       - name: Image digest
         run: echo ${{ steps.build-and-push.outputs.digest }}
