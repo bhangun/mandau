@@ -942,7 +942,27 @@ To create a new release:
 
    The installation script will be included in GitHub releases and is also available at the raw content URL.
 
-### Manual Release Trigger
+### Automated Release Process
+
+Use the automated release script to create new releases:
+
+```bash
+# Auto-increment patch version (e.g., v0.0.11 -> v0.0.12)
+./scripts/release.sh
+
+# Or create release with specific version
+./scripts/release.sh v1.0.0
+```
+
+The release script will:
+- Validate current repository state
+- Auto-increment version or use specified version
+- Update version references in source code
+- Commit changes with appropriate message
+- Create and push Git tag
+- Trigger GitHub Actions release workflow
+
+### Manual Release Process
 
 If you want to create a draft release manually:
 1. Go to the "Releases" tab in the GitHub repository

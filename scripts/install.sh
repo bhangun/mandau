@@ -303,10 +303,14 @@ download_and_install() {
     # Create default config file
     cat > "$CONFIG_DIR/config.yaml" << EOF
 # Mandau CLI Configuration
-server: "localhost:8443"
-cert: "$ORIGINAL_HOME/mandau-certs/client.crt"
-key: "$ORIGINAL_HOME/mandau-certs/client.key"
-ca: "$ORIGINAL_HOME/mandau-certs/ca.crt"
+server:
+  listen_addr: "localhost:8443"
+  tls:
+    cert_path: "$ORIGINAL_HOME/mandau-certs/client.crt"
+    key_path: "$ORIGINAL_HOME/mandau-certs/client.key"
+    ca_path: "$ORIGINAL_HOME/mandau-certs/ca.crt"
+    min_version: "TLS1.3"
+    server_name: "mandau-core"
 timeout: "30s"
 # Note: Certificates need to be generated separately using the generate-certs.sh script
 EOF

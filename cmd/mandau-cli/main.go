@@ -17,10 +17,13 @@ import (
 )
 
 var (
+	version = "unknown" // Will be set by build process
+
 	cli     = &CLI{}
 	rootCmd = &cobra.Command{
 		Use:   "mandau",
 		Short: "Mandau infrastructure control CLI",
+		Version: version, // Add version flag
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			return cli.connect(cmd)
 		},
@@ -163,17 +166,27 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 
 	// If config was loaded, use values from config as defaults if not provided via CLI/env
 	if c.config != nil {
-		if serverAddr == "localhost:8443" { // If using default and config has a value
-			serverAddr = c.config.Server.ListenAddr
+		// Only use config values if command-line flags/environment variables were not explicitly set
+		// Check if the flag was actually changed from its default value
+		if !cmd.Flags().Changed("server") && os.Getenv("MANDAU_SERVER") == "" {
+			if c.config.Server.ListenAddr != "" {
+				serverAddr = c.config.Server.ListenAddr
+			}
 		}
-		if certFile == "" && c.config.Server.TLS.CertPath != "" {
-			certFile = c.config.Server.TLS.CertPath
+		if !cmd.Flags().Changed("cert") && os.Getenv("MANDAU_CERT") == "" {
+			if c.config.Server.TLS.CertPath != "" {
+				certFile = c.config.Server.TLS.CertPath
+			}
 		}
-		if keyFile == "" && c.config.Server.TLS.KeyPath != "" {
-			keyFile = c.config.Server.TLS.KeyPath
+		if !cmd.Flags().Changed("key") && os.Getenv("MANDAU_KEY") == "" {
+			if c.config.Server.TLS.KeyPath != "" {
+				keyFile = c.config.Server.TLS.KeyPath
+			}
 		}
-		if caFile == "./certs/ca.crt" && c.config.Server.TLS.CAPath != "" {
-			caFile = c.config.Server.TLS.CAPath
+		if !cmd.Flags().Changed("ca") && os.Getenv("MANDAU_CA") == "" {
+			if c.config.Server.TLS.CAPath != "" {
+				caFile = c.config.Server.TLS.CAPath
+			}
 		}
 	}
 
