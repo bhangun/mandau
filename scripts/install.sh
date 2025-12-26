@@ -282,7 +282,27 @@ download_and_install() {
     fi
 
     print_success "Mandau binaries installed successfully!"
-    
+
+    # Create default configuration directory and file
+    print_status "Creating default configuration..."
+    USER_HOME=$(eval echo ~$(whoami))
+    CONFIG_DIR="$USER_HOME/.mandau"
+    mkdir -p "$CONFIG_DIR"
+
+    # Create default config file
+    cat > "$CONFIG_DIR/config.yaml" << EOF
+# Mandau CLI Configuration
+server: "localhost:8443"
+cert: "$USER_HOME/mandau-certs/client.crt"
+key: "$USER_HOME/mandau-certs/client.key"
+ca: "$USER_HOME/mandau-certs/ca.crt"
+timeout: "30s"
+# Note: Certificates need to be generated separately using the generate-certs.sh script
+EOF
+
+    print_success "Default configuration created at $CONFIG_DIR/config.yaml"
+    print_status "Note: You need to generate certificates in ~/mandau-certs/ directory for full functionality."
+
     # Return to original directory and cleanup
     cd - >/dev/null
     rm -rf "$TEMP_DIR"

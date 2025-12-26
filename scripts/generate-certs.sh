@@ -6,6 +6,8 @@ CA_DAYS=3650
 CERT_DAYS=365
 
 mkdir -p "$CERT_DIR"
+# Set secure permissions on the directory
+chmod 700 "$CERT_DIR"  # Restrict access to owner only
 
 echo "Generating CA certificate..."
 openssl genrsa -out "$CERT_DIR/ca.key" 4096

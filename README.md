@@ -239,25 +239,27 @@ sudo make install
 
 ### 4. Post-Installation Setup
 
-After installing Mandau, you need to set up certificates and configure the services.
+After installing Mandau, you need to set up certificates. The installation automatically creates a default configuration file at `~/.mandau/config.yaml` that points to the expected certificate locations.
 
 #### Generate Certificates
 
 Mandau uses mTLS (mutual TLS) for secure communication between components. Generate certificates for Core, Agent, and CLI:
 
 ```bash
+# Create certificates directory
+mkdir -p ~/mandau-certs
+
 # If you built from source, you can generate certificates directly:
 make certs
+cp ./certs/* ~/mandau-certs/
 
-# If you installed via curl or manual download, you'll need to get the certificate generation script:
-mkdir -p ~/mandau-setup
-cd ~/mandau-setup
+# If you installed via curl or manual download, certificates will be generated directly in the correct location:
 curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/generate-certs.sh -o generate-certs.sh
 chmod +x generate-certs.sh
-./generate-certs.sh ./certs
+./generate-certs.sh ~/mandau-certs
 ```
 
-This creates the following certificates in the `./certs` directory:
+This creates the following certificates in the `~/mandau-certs` directory:
 - `ca.crt` and `ca.key` - Certificate Authority
 - `core.crt` and `core.key` - Core service certificate
 - `agent.crt` and `agent.key` - Agent service certificate
@@ -265,16 +267,7 @@ This creates the following certificates in the `./certs` directory:
 
 #### Configure Mandau Core
 
-The Core service manages agents and provides the API endpoint. Create a service configuration:
-
-```bash
-# Create directories for configuration
-sudo mkdir -p /etc/mandau
-sudo mkdir -p ~/mandau-certs
-
-# Copy certificates to appropriate location
-cp ./certs/* ~/mandau-certs/
-```
+The Core service manages agents and provides the API endpoint.
 
 **Start Core Service:**
 ```bash
@@ -455,7 +448,7 @@ After=network.target
 [Service]
 Type=simple
 User=$(whoami)
-ExecStart=/usr/local/bin/mandau-core --listen :8443 --cert ~/mandau-certs/core.crt --key ~/mandau-certs/core.key --ca ~/mandau-certs/ca.crt
+ExecStart=/usr/local/bin/mandau-core --listen :8443 --cert /home/$(whoami)/mandau-certs/core.crt --key /home/$(whoami)/mandau-certs/core.key --ca /home/$(whoami)/mandau-certs/ca.crt
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -475,7 +468,7 @@ Requires=docker.service
 [Service]
 Type=simple
 User=$(whoami)
-ExecStart=/usr/local/bin/mandau-agent --server localhost:8443 --cert ~/mandau-certs/agent.crt --key ~/mandau-certs/agent.key --ca ~/mandau-certs/ca.crt --stack-root ~/mandau-stacks
+ExecStart=/usr/local/bin/mandau-agent --server localhost:8443 --cert /home/$(whoami)/mandau-certs/agent.crt --key /home/$(whoami)/mandau-certs/agent.key --ca /home/$(whoami)/mandau-certs/ca.crt --stack-root /home/$(whoami)/mandau-stacks
 Restart=always
 RestartSec=5
 StandardOutput=journal
