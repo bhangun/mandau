@@ -285,20 +285,36 @@ download_and_install() {
 
     # Create default configuration directory and file
     print_status "Creating default configuration..."
-    USER_HOME=$(eval echo ~$(whoami))
-    CONFIG_DIR="$USER_HOME/.mandau"
+
+    # Determine the original user (in case running with sudo)
+    if [ -n "$SUDO_USER" ]; then
+        ORIGINAL_USER="$SUDO_USER"
+    else
+        ORIGINAL_USER="$(whoami)"
+    fi
+
+    # Get the home directory for the original user
+    ORIGINAL_HOME=$(eval echo ~$ORIGINAL_USER)
+    CONFIG_DIR="$ORIGINAL_HOME/.mandau"
+
+    # Create config directory with appropriate permissions
     mkdir -p "$CONFIG_DIR"
 
     # Create default config file
     cat > "$CONFIG_DIR/config.yaml" << EOF
 # Mandau CLI Configuration
 server: "localhost:8443"
-cert: "$USER_HOME/mandau-certs/client.crt"
-key: "$USER_HOME/mandau-certs/client.key"
-ca: "$USER_HOME/mandau-certs/ca.crt"
+cert: "$ORIGINAL_HOME/mandau-certs/client.crt"
+key: "$ORIGINAL_HOME/mandau-certs/client.key"
+ca: "$ORIGINAL_HOME/mandau-certs/ca.crt"
 timeout: "30s"
 # Note: Certificates need to be generated separately using the generate-certs.sh script
 EOF
+
+    # Set appropriate permissions for the config directory and file
+    chown -R "$ORIGINAL_USER:$ORIGINAL_USER" "$CONFIG_DIR"
+    chmod 700 "$CONFIG_DIR"
+    chmod 600 "$CONFIG_DIR/config.yaml"
 
     print_success "Default configuration created at $CONFIG_DIR/config.yaml"
     print_status "Note: You need to generate certificates in ~/mandau-certs/ directory for full functionality."
