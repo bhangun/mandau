@@ -27,13 +27,45 @@ func main() {
 	// Load configuration from file first
 	coreConfig := &core.CoreConfig{}
 
-	// Load from config file
-	cfg, err := config.LoadCoreConfig(*configPath)
-	if err != nil {
-		log.Printf("Config file not found at %s, using defaults: %v", *configPath, err)
-		cfg = config.CreateDefaultCoreConfig()
-	} else {
-		log.Printf("Loaded configuration from %s", *configPath)
+	// Try to load configuration from standard locations in order of preference
+	var cfg *config.CoreConfig
+	var err error
+
+	// First, try the environment variable if set
+	configPathFromEnv := config.GetConfigPath("")
+	if configPathFromEnv != "" {
+		cfg, err = config.LoadCoreConfig(configPathFromEnv)
+		if err != nil {
+			log.Printf("Config file not found at %s, trying standard locations", configPathFromEnv)
+		} else {
+			log.Printf("Loaded configuration from %s", configPathFromEnv)
+		}
+	}
+
+	// If not found via env var or env var wasn't set, try standard locations
+	if cfg == nil {
+		// Try ~/.mandau/config.yaml (our new standard location for consistency)
+		homeDir, errHome := os.UserHomeDir()
+		if errHome == nil {
+			standardConfigPath := fmt.Sprintf("%s/.mandau/config.yaml", homeDir)
+			cfg, err = config.LoadCoreConfig(standardConfigPath)
+			if err != nil {
+				log.Printf("Config file not found at %s, trying default location", standardConfigPath)
+			} else {
+				log.Printf("Loaded configuration from %s", standardConfigPath)
+			}
+		}
+	}
+
+	// If still not found, try the old default location
+	if cfg == nil {
+		cfg, err = config.LoadCoreConfig(*configPath)
+		if err != nil {
+			log.Printf("Config file not found at %s, using defaults: %v", *configPath, err)
+			cfg = config.CreateDefaultCoreConfig()
+		} else {
+			log.Printf("Loaded configuration from %s", *configPath)
+		}
 	}
 
 	// Apply config file values as defaults

@@ -72,32 +72,74 @@ func main() {
 	// Parse only the config flag from command line args
 	// Skip the first argument (program name) and look for --config
 	args := os.Args[1:]
-	configFilePath := "config/agent/config.yaml"
 
-	// Find and extract config file path
-	for i := 0; i < len(args); i++ {
-		if args[i] == "--config" && i+1 < len(args) {
-			configFilePath = args[i+1]
-			break
-		} else if args[i] == "-config" && i+1 < len(args) {
-			configFilePath = args[i+1]
-			break
-		} else if strings.HasPrefix(args[i], "--config=") {
-			configFilePath = strings.TrimPrefix(args[i], "--config=")
-			break
-		} else if strings.HasPrefix(args[i], "-config=") {
-			configFilePath = strings.TrimPrefix(args[i], "-config=")
-			break
+	// Try to load configuration from standard locations in order of preference
+	var agentConfig *config.AgentConfig
+	var err error
+
+	// First, try the environment variable if set
+	configPathFromEnv := config.GetConfigPath("")
+	if configPathFromEnv != "" {
+		agentConfig, err = config.LoadAgentConfig(configPathFromEnv)
+		if err != nil {
+			fmt.Printf("Config file not found at %s, trying standard locations\n", configPathFromEnv)
+		} else {
+			fmt.Printf("Loaded configuration from %s\n", configPathFromEnv)
 		}
 	}
 
-	// Load configuration from file if available
-	agentConfig, err := config.LoadAgentConfig(configFilePath)
-	if err != nil {
-		fmt.Printf("Config file not found at %s, using defaults: %v\n", configFilePath, err)
-		agentConfig = config.CreateDefaultAgentConfig()
-	} else {
-		fmt.Printf("Loaded configuration from %s\n", configFilePath)
+	// If not found via env var or env var wasn't set, try standard locations
+	if agentConfig == nil {
+		// Try ~/.mandau/config.yaml (our new standard location for consistency)
+		homeDir, errHome := os.UserHomeDir()
+		if errHome == nil {
+			standardConfigPath := fmt.Sprintf("%s/.mandau/config.yaml", homeDir)
+			// For agent, we need to try loading as CoreConfig first since that's where the TLS settings are
+			coreCfg, err := config.LoadCoreConfig(standardConfigPath)
+			if err != nil {
+				fmt.Printf("Config file not found at %s, trying default location\n", standardConfigPath)
+			} else {
+				fmt.Printf("Loaded configuration from %s\n", standardConfigPath)
+				// Convert CoreConfig to AgentConfig for TLS settings
+				agentConfig = config.CreateDefaultAgentConfig()
+				// Update TLS settings from the core config
+				agentConfig.ServerConnection.TLS.CertPath = coreCfg.Server.TLS.CertPath
+				agentConfig.ServerConnection.TLS.KeyPath = coreCfg.Server.TLS.KeyPath
+				agentConfig.ServerConnection.TLS.CAPath = coreCfg.Server.TLS.CAPath
+				agentConfig.ServerConnection.CoreAddr = coreCfg.Server.ListenAddr
+			}
+		}
+	}
+
+	// If still not found, try the old default location
+	if agentConfig == nil {
+		configFilePath := "config/agent/config.yaml"
+
+		// Find and extract config file path from command line args
+		for i := 0; i < len(args); i++ {
+			if args[i] == "--config" && i+1 < len(args) {
+				configFilePath = args[i+1]
+				break
+			} else if args[i] == "-config" && i+1 < len(args) {
+				configFilePath = args[i+1]
+				break
+			} else if strings.HasPrefix(args[i], "--config=") {
+				configFilePath = strings.TrimPrefix(args[i], "--config=")
+				break
+			} else if strings.HasPrefix(args[i], "-config=") {
+				configFilePath = strings.TrimPrefix(args[i], "-config=")
+				break
+			}
+		}
+
+		// Load configuration from file if available
+		agentConfig, err = config.LoadAgentConfig(configFilePath)
+		if err != nil {
+			fmt.Printf("Config file not found at %s, using defaults: %v\n", configFilePath, err)
+			agentConfig = config.CreateDefaultAgentConfig()
+		} else {
+			fmt.Printf("Loaded configuration from %s\n", configFilePath)
+		}
 	}
 
 	// Filter out config-related arguments for regular flag parsing
