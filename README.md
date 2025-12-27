@@ -253,12 +253,59 @@ After installing Mandau, you need to set up certificates. The installation autom
 - Configure certificates for server authentication
 - Set up agents on each Docker host to be managed
 
+#### Client Configuration for Remote Server
+
 For client usage, update the configuration to point to your remote server:
+
+1. **Edit the configuration file:**
 ```bash
-# Edit the configuration file to point to your remote server
 nano ~/.mandau/config.yaml
-# Change "listen_addr: localhost:8443" to "listen_addr: your-server.com:8443"
 ```
+
+2. **Update the server address** to point to your remote server:
+```yaml
+server:
+  listen_addr: "your-server.com:8443"  # Change to your remote server address and port
+  tls:
+    cert_path: "/home/username/mandau-certs/client.crt"
+    key_path: "/home/username/mandau-certs/client.key"
+    ca_path: "/home/username/mandau-certs/ca.crt"
+    min_version: "TLS1.3"
+    server_name: "mandau-core"
+timeout: "30s"
+```
+
+3. **Ensure certificates are properly configured:**
+   - The client certificates must be signed by the same CA that signed the remote server's certificates
+   - Place the certificates in the location specified in the config file
+   - Make sure certificate paths are accessible to the client
+
+4. **Alternative: Use environment variables:**
+```bash
+export MANDAU_SERVER="your-server.com:8443"
+export MANDAU_CERT="/home/username/mandau-certs/client.crt"
+export MANDAU_KEY="/home/username/mandau-certs/client.key"
+export MANDAU_CA="/home/username/mandau-certs/ca.crt"
+```
+
+5. **Test the connection:**
+```bash
+mandau agent list
+```
+
+#### Security Considerations
+
+- **Certificate Validation**: The client validates the server certificate using the CA certificate
+- **mTLS Authentication**: Both client and server authenticate each other using certificates
+- **Secure Communication**: All communication is encrypted using TLS 1.3
+- **Port Configuration**: The default port is 8443, but can be configured on the server side
+
+#### Troubleshooting Remote Connections
+
+- **Connection refused**: Verify the server is running and accessible on port 8443
+- **Certificate errors**: Ensure client certificates are signed by the same CA as the server
+- **Authentication failures**: Verify certificate paths and permissions
+- **Firewall issues**: Ensure port 8443 is open on the server
 
 #### Generate Certificates
 
