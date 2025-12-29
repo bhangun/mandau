@@ -11,6 +11,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Print colored output
@@ -28,6 +29,10 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
+}
+
+print_dev() {
+    echo -e "${PURPLE}[DEV]${NC} $1"
 }
 
 # Detect OS and architecture
@@ -69,10 +74,10 @@ detect_platform() {
 # Get the latest release version from GitHub API
 get_latest_version() {
     print_status "Fetching latest release version..."
-    
+
     # Use GitHub API to get the latest release
     LATEST_VERSION=$(curl -s "https://api.github.com/repos/bhangun/mandau/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    
+
     if [ -z "$LATEST_VERSION" ]; then
         print_error "Failed to fetch latest version from GitHub API"
         # Fallback to a default version
@@ -81,6 +86,236 @@ get_latest_version() {
     else
         print_status "Latest version: $LATEST_VERSION"
     fi
+}
+
+# Generate certificates if they don't exist
+generate_certificates() {
+    local cert_dir="$1"
+    local original_user="$2"
+    
+    if [ -d "$cert_dir" ] && [ -f "$cert_dir/ca.crt" ]; then
+        print_status "Certificates already exist in $cert_dir, skipping generation"
+        return 0
+    fi
+
+    print_status "Generating certificates in $cert_dir..."
+    
+    # Create the certificates directory with proper permissions
+    mkdir -p "$cert_dir"
+    chown "$original_user:$original_user" "$cert_dir"
+    chmod 700 "$cert_dir"  # Restrict access to owner only
+
+    # Generate CA certificate
+    openssl genrsa -out "$cert_dir/ca.key" 4096
+    openssl req -new -x509 -days 3650 -key "$cert_dir/ca.key" \
+        -out "$cert_dir/ca.crt" \
+        -subj "/CN=Mandau CA/O=Mandau/C=US" -nodes
+
+    # Generate Core certificate
+    openssl genrsa -out "$cert_dir/core.key" 4096
+    openssl req -new -key "$cert_dir/core.key" \
+        -out "$cert_dir/core.csr" \
+        -subj "/CN=mandau-core/O=Mandau/C=US" -nodes
+
+    cat > "$cert_dir/core.ext" <<EOF
+subjectAltName = DNS:mandau-core,DNS:localhost,IP:127.0.0.1
+extendedKeyUsage = serverAuth,clientAuth
+EOF
+
+    openssl x509 -req -in "$cert_dir/core.csr" \
+        -CA "$cert_dir/ca.crt" -CAkey "$cert_dir/ca.key" \
+        -CAcreateserial -out "$cert_dir/core.crt" \
+        -days 365 -extfile "$cert_dir/core.ext"
+
+    # Generate Agent certificate
+    openssl genrsa -out "$cert_dir/agent.key" 4096
+    openssl req -new -key "$cert_dir/agent.key" \
+        -out "$cert_dir/agent.csr" \
+        -subj "/CN=mandau-agent/O=Mandau/C=US" -nodes
+
+    cat > "$cert_dir/agent.ext" <<EOF
+subjectAltName = DNS:mandau-agent,DNS:localhost,IP:127.0.0.1
+extendedKeyUsage = serverAuth,clientAuth
+EOF
+
+    openssl x509 -req -in "$cert_dir/agent.csr" \
+        -CA "$cert_dir/ca.crt" -CAkey "$cert_dir/ca.key" \
+        -CAcreateserial -out "$cert_dir/agent.crt" \
+        -days 365 -extfile "$cert_dir/agent.ext"
+
+    # Generate CLI client certificate
+    openssl genrsa -out "$cert_dir/client.key" 4096
+    openssl req -new -key "$cert_dir/client.key" \
+        -out "$cert_dir/client.csr" \
+        -subj "/CN=mandau-cli/O=Mandau/C=US" -nodes
+
+    cat > "$cert_dir/client.ext" <<EOF
+extendedKeyUsage = clientAuth
+EOF
+
+    openssl x509 -req -in "$cert_dir/client.csr" \
+        -CA "$cert_dir/ca.crt" -CAkey "$cert_dir/ca.key" \
+        -CAcreateserial -out "$cert_dir/client.crt" \
+        -days 365 -extfile "$cert_dir/client.ext"
+
+    # Set proper permissions
+    chmod 600 "$cert_dir"/*.key
+    chmod 644 "$cert_dir"/*.crt "$cert_dir"/*.ext "$cert_dir"/ca.srl
+
+    # Set ownership to the original user
+    chown "$original_user:$original_user" "$cert_dir"/*
+    
+    print_success "Certificates generated in $cert_dir"
+}
+
+# Create systemd service files with absolute paths
+create_systemd_services() {
+    local original_user="$1"
+    local original_home="$2"
+    
+    print_status "Creating systemd service files with absolute paths..."
+    
+    # Create mandau-core.service
+    cat > "/tmp/mandau-core.service" << EOF
+[Unit]
+Description=Mandau Core Service
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=$original_user
+Group=$original_user
+ExecStart=/usr/local/bin/mandau-core --listen :8443 --cert $original_home/mandau-certs/core.crt --key $original_home/mandau-certs/core.key --ca $original_home/mandau-certs/ca.crt
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$original_home/mandau-certs $original_home/mandau-stacks /tmp
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Create mandau-agent.service
+    cat > "/tmp/mandau-agent.service" << EOF
+[Unit]
+Description=Mandau Agent Service
+After=network.target mandau-core.service
+Wants=mandau-core.service
+
+[Service]
+Type=simple
+User=$original_user
+Group=$original_user
+ExecStart=/usr/local/bin/mandau-agent --server localhost:8443 --cert $original_home/mandau-certs/agent.crt --key $original_home/mandau-certs/agent.key --ca $original_home/mandau-certs/ca.crt --stack-root $original_home/mandau-stacks
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$original_home/mandau-certs $original_home/mandau-stacks /var/run/docker.sock /tmp
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Copy service files to system location with sudo
+    if command -v sudo >/dev/null 2>&1; then
+        SUDO="sudo"
+    else
+        SUDO=""
+    fi
+
+    if [ -n "$SUDO" ]; then
+        $SUDO cp /tmp/mandau-core.service /etc/systemd/system/
+        $SUDO cp /tmp/mandau-agent.service /etc/systemd/system/
+        $SUDO systemctl daemon-reload
+        print_success "Systemd service files created and loaded"
+    else
+        print_warning "Cannot create systemd service files without sudo access"
+        print_status "You'll need to manually create the service files with absolute paths"
+    fi
+}
+
+# Create default configuration with profile support
+create_default_config() {
+    local original_user="$1"
+    local original_home="$2"
+    
+    print_status "Creating default configuration with profile support..."
+    
+    CONFIG_DIR="$original_home/.mandau"
+    mkdir -p "$CONFIG_DIR"
+
+    # Create main config file with profile support
+    cat > "$CONFIG_DIR/config.yaml" << EOF
+# Mandau Unified Configuration with Profile Support
+# This is the default profile (production)
+server:
+  listen_addr: "localhost:8443"  # For core server: address to listen on; For client: remote server address
+  tls:
+    cert_path: "$original_home/mandau-certs/client.crt"  # Client certificate
+    key_path: "$original_home/mandau-certs/client.key"   # Client key
+    ca_path: "$original_home/mandau-certs/ca.crt"        # CA certificate
+    min_version: "TLS1.3"
+    server_name: "mandau-core"
+timeout: "30s"
+# For remote server usage, update server.listen_addr to your remote server (e.g., "myserver.com:8443")
+EOF
+
+    # Create development profile
+    cat > "$CONFIG_DIR/dev.yaml" << EOF
+# Development Profile Configuration
+server:
+  listen_addr: "localhost:8443"
+  tls:
+    cert_path: "$original_home/mandau-certs/client.crt"
+    key_path: "$original_home/mandau-certs/client.key"
+    ca_path: "$original_home/mandau-certs/ca.crt"
+    min_version: "TLS1.3"
+    server_name: "mandau-core"
+timeout: "30s"
+# Development-specific settings can go here
+EOF
+
+    # Create local development profile for testing
+    cat > "$CONFIG_DIR/local.yaml" << EOF
+# Local Development Profile Configuration
+server:
+  listen_addr: "localhost:8443"
+  tls:
+    cert_path: "$original_home/mandau-certs/client.crt"
+    key_path: "$original_home/mandau-certs/client.key"
+    ca_path: "$original_home/mandau-certs/ca.crt"
+    min_version: "TLS1.3"
+    server_name: "mandau-core"
+timeout: "10s"
+# Local development settings
+EOF
+
+    # Set appropriate permissions for the config directory and files
+    chown -R "$original_user:$original_user" "$CONFIG_DIR"
+    chmod 700 "$CONFIG_DIR"
+    chmod 600 "$CONFIG_DIR/config.yaml"
+    chmod 600 "$CONFIG_DIR/dev.yaml"
+    chmod 600 "$CONFIG_DIR/local.yaml"
+
+    print_success "Default configuration created at $CONFIG_DIR/"
+    print_dev "Development profiles created: dev.yaml, local.yaml"
+    print_status "Use MANDAU_PROFILE=dev to use development configuration"
+    print_status "Certificates are located in ~/mandau-certs/ (first-class location)"
 }
 
 # Download and install binaries
@@ -103,11 +338,11 @@ download_and_install() {
     fi
 
     print_status "Downloading Mandau binaries from: $URL"
-    
+
     # Create temporary directory
     TEMP_DIR=$(mktemp -d)
     cd "$TEMP_DIR"
-    
+
     # Download the file - temporarily disable set -e for this operation
     set +e
     if command -v wget >/dev/null 2>&1; then
@@ -283,9 +518,6 @@ download_and_install() {
 
     print_success "Mandau binaries installed successfully!"
 
-    # Create default configuration directory and file
-    print_status "Creating default configuration..."
-
     # Determine the original user (in case running with sudo)
     if [ -n "$SUDO_USER" ]; then
         ORIGINAL_USER="$SUDO_USER"
@@ -295,47 +527,26 @@ download_and_install() {
 
     # Get the home directory for the original user
     ORIGINAL_HOME=$(eval echo ~$ORIGINAL_USER)
-    CONFIG_DIR="$ORIGINAL_HOME/.mandau"
+    
+    # Generate certificates in the first-class location
+    generate_certificates "$ORIGINAL_HOME/mandau-certs" "$ORIGINAL_USER"
 
-    # Create config directory with appropriate permissions
-    mkdir -p "$CONFIG_DIR"
+    # Create default configuration with profile support
+    create_default_config "$ORIGINAL_USER" "$ORIGINAL_HOME"
 
-    # Create default config file for unified usage
-    cat > "$CONFIG_DIR/config.yaml" << EOF
-# Mandau Unified Configuration
-server:
-  listen_addr: "localhost:8443"  # For core server: address to listen on; For client: remote server address
-  tls:
-    cert_path: "$ORIGINAL_HOME/mandau-certs/core.crt"  # For core server: server cert; For client: client cert
-    key_path: "$ORIGINAL_HOME/mandau-certs/core.key"   # For core server: server key; For client: client key
-    ca_path: "$ORIGINAL_HOME/mandau-certs/ca.crt"
-    min_version: "TLS1.3"
-    server_name: "mandau-core"
-agent:
-  server_connection:
-    core_addr: "localhost:8443"
-    tls:
-      cert_path: "$ORIGINAL_HOME/mandau-certs/agent.crt"  # Agent certificate to connect to core
-      key_path: "$ORIGINAL_HOME/mandau-certs/agent.key"
-      ca_path: "$ORIGINAL_HOME/mandau-certs/ca.crt"
-      min_version: "TLS1.3"
-      server_name: "mandau-core"
-timeout: "30s"
-# Note:
-# - For client usage, update server.listen_addr to your remote server (e.g., "myserver.com:8443")
-# - For server usage, certificates need to match the component (core/agent/client)
-# - Certificates need to be generated separately using the generate-certs.sh script
-EOF
+    # Create systemd service files with absolute paths
+    create_systemd_services "$ORIGINAL_USER" "$ORIGINAL_HOME"
 
-    # Set appropriate permissions for the config directory and file
-    chown -R "$ORIGINAL_USER:$ORIGINAL_USER" "$CONFIG_DIR"
-    chmod 700 "$CONFIG_DIR"
-    chmod 600 "$CONFIG_DIR/config.yaml"
+    # Create stacks directory for agent
+    mkdir -p "$ORIGINAL_HOME/mandau-stacks"
+    chown "$ORIGINAL_USER:$ORIGINAL_USER" "$ORIGINAL_HOME/mandau-stacks"
+    chmod 755 "$ORIGINAL_HOME/mandau-stacks"
 
-    print_success "Default client configuration created at $CONFIG_DIR/config.yaml"
-    print_status "Note: Update server address to point to your remote Mandau Core instance"
-    print_status "Note: You need to generate certificates in ~/mandau-certs/ directory for full functionality."
-    print_status "For remote server configuration, use the same CA certificates."
+    print_success "Mandau installation completed successfully!"
+    print_status "Certificates are in ~/mandau-certs/ (first-class location)"
+    print_status "Configuration is in ~/.mandau/ with profile support"
+    print_status "Stacks directory created at ~/mandau-stacks/"
+    print_status "Systemd services created with absolute paths"
 
     # Return to original directory and cleanup
     cd - >/dev/null
@@ -344,7 +555,7 @@ EOF
 
 # Main execution
 main() {
-    print_status "Starting Mandau installation..."
+    print_status "Starting Mandau installation with enhanced configuration..."
 
     # Detect platform
     detect_platform
@@ -380,6 +591,8 @@ main() {
     fi
 
     print_status "Installation complete! Run 'mandau --help' to get started."
+    print_status "For development: Use MANDAU_PROFILE=dev to use development configuration"
+    print_status "For systemd services: Run 'sudo systemctl enable mandau-core mandau-agent' and 'sudo systemctl start mandau-core'"
 }
 
 # Run main function

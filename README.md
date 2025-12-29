@@ -164,7 +164,7 @@ make certs
 
 #### Option A: Install using curl (Recommended)
 
-Install Mandau directly using the curl command. This method automatically detects your platform and installs the appropriate binaries.
+Install Mandau directly using the curl command. This method automatically detects your platform and installs the appropriate binaries with enhanced configuration.
 
 **Important**: The installation requires sudo privileges to install to `/usr/local/bin/`.
 
@@ -172,12 +172,16 @@ Install Mandau directly using the curl command. This method automatically detect
 curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | sudo bash
 ```
 
-**What the installation script does:**
+**What the installation script does (Enhanced):**
 - Detects your operating system and architecture (Linux/macOS: amd64/arm64, Windows: amd64)
 - Fetches the latest release version from GitHub API
 - Downloads the appropriate binary package for your platform
 - Extracts and makes binaries executable
 - Installs `mandau`, `mandau-core`, and `mandau-agent` to `/usr/local/bin/`
+- **NEW**: Generates certificates in `~/mandau-certs/` (first-class location)
+- **NEW**: Creates configuration profiles in `~/.mandau/` with dev/test/prod support
+- **NEW**: Sets up systemd services with absolute paths for reliable operation
+- **NEW**: Creates `~/mandau-stacks/` directory for stack management
 
 **Alternative curl command with explicit sudo:**
 ```bash
@@ -362,7 +366,7 @@ mandau-agent \
 
 #### Configure CLI Authentication
 
-You can use either environment variables or command-line flags for CLI authentication:
+You can use either environment variables, command-line flags, or configuration files for CLI authentication:
 
 **Option A: Using Environment Variables**
 ```bash
@@ -377,8 +381,8 @@ export MANDAU_CA=~/mandau-certs/ca.crt
 mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt --server localhost:8443 [command]
 ```
 
-**Option C: Using Configuration File**
-Create a configuration file at `~/.config/mandau/config.yaml`:
+**Option C: Using Configuration File with Profile Support (Recommended)**
+Mandau now supports configuration profiles for different environments. The default location is `~/.mandau/config.yaml`:
 
 ```yaml
 server: "localhost:8443"
@@ -387,6 +391,26 @@ key: "~/mandau-certs/client.key"
 ca: "~/mandau-certs/ca.crt"
 timeout: "30s"
 ```
+
+**Option D: Using Profile Management (New!)**
+Mandau now supports multiple configuration profiles for different environments (dev, test, prod):
+
+```bash
+# List available profiles
+mandau-profile.sh list
+
+# Switch to development profile
+mandau-profile.sh use dev
+
+# Show current profile
+mandau-profile.sh show
+
+# Or use environment variable to specify profile
+export MANDAU_PROFILE=dev
+mandau agent list
+```
+
+Configuration profiles are stored in `~/.mandau/` directory with names like `dev.yaml`, `test.yaml`, `prod.yaml`, etc.
 
 ### 5. Run with Enhanced Reliability (Recommended)
 
@@ -429,7 +453,29 @@ mandau-agent \
   --stack-root ~/mandau-stacks
 ```
 
-### 6. Use CLI
+### 6. Development Workflow (New!)
+
+For enhanced development experience with profile management:
+
+```bash
+# After installation, set up development environment
+curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/setup-dev.sh -o setup-dev.sh
+chmod +x setup-dev.sh
+./setup-dev.sh
+
+# Use development profiles
+export MANDAU_PROFILE=dev
+mandau agent list
+
+# Or switch profiles dynamically
+~/mandau-profile.sh use dev
+mandau agent list
+
+# Start development services
+~/mandau-dev-start.sh
+```
+
+### 7. Use CLI
 
 After installation, you can use the Mandau CLI with your certificates.
 
