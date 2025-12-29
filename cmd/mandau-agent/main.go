@@ -36,7 +36,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-var version = "0.0.15" // Will be set by build process
+var version = "0.0.16" // Will be set by build process
 
 type Agent struct {
 	agentv1.UnimplementedAgentServiceServer

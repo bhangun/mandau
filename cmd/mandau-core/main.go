@@ -10,7 +10,7 @@ import (
 	"github.com/bhangun/mandau/pkg/core"
 )
 
-var version = "0.0.15" // Will be set by build process
+var version = "0.0.16" // Will be set by build process
 
 
 func main() {
