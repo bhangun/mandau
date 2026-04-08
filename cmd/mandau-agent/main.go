@@ -187,7 +187,8 @@ func main() {
 	}
 
 	// Use server connection config for core server address if available
-	if agentConfig.ServerConnection.CoreAddr != "" {
+	// Only use config file value if the default was used (not overridden by CLI)
+	if agentConfig.ServerConnection.CoreAddr != "" && cfg.ServerAddr == "localhost:8443" {
 		cfg.ServerAddr = agentConfig.ServerConnection.CoreAddr
 	}
 

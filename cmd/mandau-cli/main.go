@@ -6,7 +6,10 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	v1 "github.com/bhangun/mandau/api/v1"
 	"github.com/bhangun/mandau/pkg/config"
@@ -45,7 +48,7 @@ type CLI struct {
 func main() {
 
 	// Global flags
-	rootCmd.PersistentFlags().String("server", "localhost:8443", "Core server address")
+	rootCmd.PersistentFlags().String("server", "localhost:9443", "Core server address")
 	rootCmd.PersistentFlags().String("cert", "", "Client certificate")
 	rootCmd.PersistentFlags().String("key", "", "Client key")
 	rootCmd.PersistentFlags().String("ca", "", "CA certificate")
@@ -91,6 +94,35 @@ func main() {
 
 	rootCmd.AddCommand(agentCmd, stackCmd)
 
+	// Auth commands (manage users via REST API)
+	authCmd := &cobra.Command{
+		Use:   "auth",
+		Short: "User authentication management",
+	}
+
+	authCmd.AddCommand(&cobra.Command{
+		Use:   "add [username] [password] [role]",
+		Short: "Add a new user",
+		Long:  "Add a new user to the core server. Role can be 'admin' or 'user'.",
+		Args:  cobra.ExactArgs(3),
+		RunE:  cli.addUser,
+	})
+
+	authCmd.AddCommand(&cobra.Command{
+		Use:   "delete [username]",
+		Short: "Delete a user",
+		Args:  cobra.ExactArgs(1),
+		RunE:  cli.deleteUser,
+	})
+
+	authCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List all users",
+		RunE:  cli.listUsers,
+	})
+
+	rootCmd.AddCommand(authCmd)
+
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -120,7 +152,7 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 			standardConfigPath := fmt.Sprintf("%s/.mandau/config.yaml", homeDir)
 			cfg, err = config.LoadCoreConfig(standardConfigPath)
 			if err != nil {
-				fmt.Printf("Config file not found at %s, trying command-line flags/environment variables\n", standardConfigPath)
+				// Don't print error yet, we'll try other locations
 			} else {
 				fmt.Printf("Loaded configuration from %s\n", standardConfigPath)
 			}
@@ -133,7 +165,6 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 		cfg, err = config.LoadCoreConfig(configPath)
 		if err != nil {
 			// Config file not found, proceed with command-line flags/env vars
-			fmt.Printf("Config file not found at %s, using command-line flags/environment variables\n", configPath)
 		} else {
 			fmt.Printf("Loaded configuration from %s\n", configPath)
 		}
@@ -143,7 +174,7 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 		c.config = cfg
 	}
 
-	serverAddr, err := c.getFlagOrEnv(cmd, "server", "MANDAU_SERVER", "localhost:8443")
+	serverAddr, err := c.getFlagOrEnv(cmd, "server", "MANDAU_SERVER", "localhost:9443")
 	if err != nil {
 		return err
 	}
@@ -158,31 +189,70 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 		return err
 	}
 
-	caFile, err := c.getFlagOrEnv(cmd, "ca", "MANDAU_CA", "./certs/ca.crt")
+	caFile, err := c.getFlagOrEnv(cmd, "ca", "MANDAU_CA", "")
 	if err != nil {
 		return err
+	}
+
+	// Auto-discover certificates from ~/.mandau/certs/ if not provided
+	if certFile == "" || keyFile == "" || caFile == "" {
+		homeDir, errHome := os.UserHomeDir()
+		if errHome == nil {
+			mandauCertDir := filepath.Join(homeDir, ".mandau", "certs")
+			
+			// Check if auto-discovery directory exists
+			if _, err := os.Stat(mandauCertDir); err == nil {
+				// Use auto-discovered certificates if not explicitly provided
+				if certFile == "" {
+					autoCert := filepath.Join(mandauCertDir, "client.crt")
+					if _, err := os.Stat(autoCert); err == nil {
+						certFile = autoCert
+					}
+				}
+				if keyFile == "" {
+					autoKey := filepath.Join(mandauCertDir, "client.key")
+					if _, err := os.Stat(autoKey); err == nil {
+						keyFile = autoKey
+					}
+				}
+				if caFile == "" {
+					autoCA := filepath.Join(mandauCertDir, "ca.crt")
+					if _, err := os.Stat(autoCA); err == nil {
+						caFile = autoCA
+					}
+				}
+				
+				if certFile != "" && keyFile != "" && caFile != "" {
+					fmt.Printf("Using auto-discovered certificates from %s\n", mandauCertDir)
+				}
+			}
+		}
 	}
 
 	// If config was loaded, use values from config as defaults if not provided via CLI/env
 	if c.config != nil {
 		// Only use config values if command-line flags/environment variables were not explicitly set
-		// Check if the flag was actually changed from its default value
 		if !cmd.Flags().Changed("server") && os.Getenv("MANDAU_SERVER") == "" {
 			if c.config.Server.ListenAddr != "" {
-				serverAddr = c.config.Server.ListenAddr
+				// Ensure the address has a host (not just ":port")
+				addr := c.config.Server.ListenAddr
+				if strings.HasPrefix(addr, ":") {
+					addr = "localhost" + addr
+				}
+				serverAddr = addr
 			}
 		}
-		if !cmd.Flags().Changed("cert") && os.Getenv("MANDAU_CERT") == "" {
+		if !cmd.Flags().Changed("cert") && os.Getenv("MANDAU_CERT") == "" && certFile == "" {
 			if c.config.Server.TLS.CertPath != "" {
 				certFile = c.config.Server.TLS.CertPath
 			}
 		}
-		if !cmd.Flags().Changed("key") && os.Getenv("MANDAU_KEY") == "" {
+		if !cmd.Flags().Changed("key") && os.Getenv("MANDAU_KEY") == "" && keyFile == "" {
 			if c.config.Server.TLS.KeyPath != "" {
 				keyFile = c.config.Server.TLS.KeyPath
 			}
 		}
-		if !cmd.Flags().Changed("ca") && os.Getenv("MANDAU_CA") == "" {
+		if !cmd.Flags().Changed("ca") && os.Getenv("MANDAU_CA") == "" && caFile == "" {
 			if c.config.Server.TLS.CAPath != "" {
 				caFile = c.config.Server.TLS.CAPath
 			}
@@ -190,7 +260,11 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 	}
 
 	if certFile == "" || keyFile == "" {
-		return fmt.Errorf("client certificate required (MANDAU_CERT, MANDAU_KEY)")
+		return fmt.Errorf("client certificate required (use 'mandau cert gen' to generate, or provide MANDAU_CERT, MANDAU_KEY)")
+	}
+
+	if caFile == "" {
+		return fmt.Errorf("CA certificate required (use 'mandau cert gen' to generate, or provide MANDAU_CA)")
 	}
 
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
@@ -379,5 +453,93 @@ func (c *CLI) stackLogs(cmd *cobra.Command, args []string) error {
 		fmt.Printf("[%s] [%s] %s\n", timestamp, entry.ServiceName, string(entry.Content))
 	}
 
+	return nil
+}
+
+// User management stubs (auth commands)
+func (c *CLI) addUser(cmd *cobra.Command, args []string) error {
+	username := args[0]
+	password := args[1]
+	role := args[2]
+
+	fmt.Printf("Adding user: %s (role: %s)\n", username, role)
+
+	// Create user via REST API
+	return c.createUserViaAPI(username, password, role)
+}
+
+func addUser(cmd *cobra.Command, args []string) error {
+	return cli.addUser(cmd, args)
+}
+
+func (c *CLI) deleteUser(cmd *cobra.Command, args []string) error {
+	username := args[0]
+	fmt.Printf("Deleting user: %s\n", username)
+
+	// Delete user via REST API
+	return c.deleteUserViaAPI(username)
+}
+
+func deleteUser(cmd *cobra.Command, args []string) error {
+	return cli.deleteUser(cmd, args)
+}
+
+// createUserViaAPI creates a user via the REST API
+func (c *CLI) createUserViaAPI(username, password, role string) error {
+	serverAddr, err := c.getFlagOrEnv(nil, "server", "MANDAU_SERVER", "localhost:9443")
+	if err != nil {
+		return err
+	}
+
+	// Get certificate paths
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("get home dir: %w", err)
+	}
+
+	certFile := homeDir + "/.mandau/certs/client.crt"
+	keyFile := homeDir + "/.mandau/certs/client.key"
+
+	// Create HTTP client with mTLS
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS13,
+	}
+
+	// Load client certificate if available
+	if _, err := os.Stat(certFile); err == nil {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return fmt.Errorf("load client cert: %w", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
+
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   30,
+	}
+
+	// Call the user management API
+	// This would be implemented based on your core server's user management endpoints
+	_ = client
+	_ = serverAddr
+
+	fmt.Println("Note: User management API integration pending")
+	return nil
+}
+
+// deleteUserViaAPI deletes a user via the REST API
+func (c *CLI) deleteUserViaAPI(username string) error {
+	fmt.Println("Note: User deletion API integration pending")
+	return nil
+}
+
+// listUsersViaAPI lists users via the REST API
+func (c *CLI) listUsersViaAPI() error {
+	fmt.Println("Note: User listing API integration pending")
 	return nil
 }
