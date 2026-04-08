@@ -2,10 +2,10 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/bhangun/mandau/pkg/utils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -88,18 +88,15 @@ type AgentManagementConfig struct {
 	AutoDeregister    bool   `yaml:"auto_deregister"`
 }
 
-// expandPath expands home directory (~) and $HOME in paths
+// expandPath expands home directory (~) and $HOME in paths (cross-platform)
 func expandPath(p string) string {
+	// Use the cross-platform utility
+	p = utils.ExpandPath(p)
+
+	// Also expand $HOME for Unix-style configs
 	homeDir, _ := os.UserHomeDir()
-	
-	// Expand ~ at the beginning
-	if strings.HasPrefix(p, "~") {
-		p = filepath.Join(homeDir, p[1:])
-	}
-	
-	// Expand $HOME
 	p = strings.ReplaceAll(p, "$HOME", homeDir)
-	
+
 	return p
 }
 

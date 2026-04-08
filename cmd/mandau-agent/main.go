@@ -23,6 +23,7 @@ import (
 	"github.com/bhangun/mandau/pkg/agent/stack"
 	"github.com/bhangun/mandau/pkg/config"
 	"github.com/bhangun/mandau/pkg/plugin"
+	"github.com/bhangun/mandau/pkg/utils"
 	"github.com/bhangun/mandau/plugins/auth/rbac"
 	"github.com/moby/moby/client"
 	"google.golang.org/grpc"
@@ -38,15 +39,9 @@ import (
 
 var version = "0.0.16" // Will be set by build process
 
-// expandTildePath expands ~ to the user's home directory
+// expandTildePath expands ~ to the user's home directory (cross-platform)
 func expandTildePath(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err == nil {
-			return filepath.Join(homeDir, path[2:])
-		}
-	}
-	return path
+	return utils.ExpandPath(path)
 }
 
 type Agent struct {

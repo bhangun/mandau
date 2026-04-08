@@ -19,6 +19,7 @@ import (
 	"github.com/bhangun/mandau/pkg/auth"
 	"github.com/bhangun/mandau/pkg/config"
 	"github.com/bhangun/mandau/pkg/plugin"
+	"github.com/bhangun/mandau/pkg/utils"
 	"github.com/bhangun/mandau/pkg/web"
 	"github.com/bhangun/mandau/plugins/auth/rbac"
 	"google.golang.org/grpc"
@@ -32,13 +33,7 @@ import (
 
 // expandTilde expands ~ to the user's home directory
 func expandTilde(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err == nil {
-			return filepath.Join(homeDir, path[2:])
-		}
-	}
-	return path
+	return utils.ExpandPath(path)
 }
 
 // Core is the central control plane that manages multiple agents
