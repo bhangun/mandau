@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"google.golang.org/grpc"
 )
 
 // wsClient implements Client for WebSocket transport
@@ -95,11 +96,6 @@ func (w *wsClient) Connect(ctx context.Context) error {
 }
 
 func (w *wsClient) pingLoop() {
-	readDeadline := 60 * time.Second
-	if w.config.WebSocket.ReadDeadline != 0 {
-		readDeadline = w.config.WebSocket.ReadDeadline
-	}
-
 	for {
 		select {
 		case <-w.ping.C:

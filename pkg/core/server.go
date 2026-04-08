@@ -179,20 +179,41 @@ func loadPlugins(plugins *plugin.Registry, dir string, pluginConfig config.Plugi
 
 func (c *Core) Serve() error {
 	// mTLS configuration
-	cert, err := tls.LoadX509KeyPair(c.config.CertPath, c.config.KeyPath)
+	// Read server key first
+	keyPEM, err := os.ReadFile(c.config.KeyPath)
+	if err != nil {
+		return fmt.Errorf("load key: %w", err)
+	}
+
+	// Read server certificate
+	serverCertPEM, err := os.ReadFile(c.config.CertPath)
 	if err != nil {
 		return fmt.Errorf("load cert: %w", err)
 	}
 
-	// Load CA certificate to verify client certificates
-	caCert, err := os.ReadFile(c.config.CAPath)
+	// Load CA certificate to verify client certificates AND include in chain
+	caCertPEM, err := os.ReadFile(c.config.CAPath)
 	if err != nil {
 		return fmt.Errorf("load CA cert: %w", err)
 	}
 
 	caCertPool := x509.NewCertPool()
-	if !caCertPool.AppendCertsFromPEM(caCert) {
+	if !caCertPool.AppendCertsFromPEM(caCertPEM) {
 		return fmt.Errorf("parse CA cert")
+	}
+
+	// Build full certificate chain: server cert + CA cert
+	// This allows clients to verify the server's certificate against the CA
+	fullChainPEM := append(serverCertPEM, caCertPEM...)
+
+	// Create certificate with full chain
+	cert, err := tls.X509KeyPair(fullChainPEM, keyPEM)
+	if err != nil {
+		// Fallback to original cert if chain building fails
+		cert, err = tls.X509KeyPair(serverCertPEM, keyPEM)
+		if err != nil {
+			return fmt.Errorf("load certificate: %w", err)
+		}
 	}
 
 	tlsConfig := &tls.Config{

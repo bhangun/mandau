@@ -2,6 +2,7 @@
 
 # Mandau Installation Script
 # This script automatically detects your platform and installs the appropriate Mandau binaries
+# Supports both development (self-signed CA) and production (centralized CA) deployments
 
 # Don't exit immediately on error - we'll handle errors explicitly
 # set -e is too aggressive for this script
@@ -89,36 +90,64 @@ get_latest_version() {
 }
 
 # Generate certificates if they don't exist
+# Supports both development (self-signed CA) and production (centralized CA) modes
 generate_certificates() {
     local cert_dir="$1"
     local original_user="$2"
-    
+    local ca_cert="${MANDAU_CA_CERT:-}"
+    local ca_key="${MANDAU_CA_KEY:-}"
+    local core_hostname="${MANDAU_CORE_HOSTNAME:-localhost}"
+    local core_ip="${MANDAU_CORE_IP:-127.0.0.1}"
+    local agent_hostname="${MANDAU_AGENT_HOSTNAME:-localhost}"
+    local agent_ip="${MANDAU_AGENT_IP:-127.0.0.1}"
+
     if [ -d "$cert_dir" ] && [ -f "$cert_dir/ca.crt" ]; then
         print_status "Certificates already exist in $cert_dir, skipping generation"
         return 0
     fi
 
     print_status "Generating certificates in $cert_dir..."
-    
+
     # Create the certificates directory with proper permissions
     mkdir -p "$cert_dir"
     chown "$original_user:$original_user" "$cert_dir"
     chmod 700 "$cert_dir"  # Restrict access to owner only
 
-    # Generate CA certificate
-    openssl genrsa -out "$cert_dir/ca.key" 4096
-    openssl req -new -x509 -days 3650 -key "$cert_dir/ca.key" \
-        -out "$cert_dir/ca.crt" \
-        -subj "/CN=Mandau CA/O=Mandau/C=US" -nodes
+    # Check if we're using external CA (production mode)
+    if [ -n "$ca_cert" ] && [ -f "$ca_cert" ]; then
+        print_status "Using external CA certificate from: $ca_cert"
+        cp "$ca_cert" "$cert_dir/ca.crt"
+        
+        if [ -n "$ca_key" ] && [ -f "$ca_key" ]; then
+            print_status "Using external CA key from: $ca_key"
+            cp "$ca_key" "$cert_dir/ca.key"
+            chmod 600 "$cert_dir/ca.key"
+        else
+            print_warning "CA key not provided - cannot generate server certificates"
+            print_status "Please generate server certificates manually or provide CA key via MANDAU_CA_KEY"
+            chown -R "$original_user:$original_user" "$cert_dir"
+            return 0
+        fi
+    else
+        print_status "Generating new CA certificate (development mode)"
+        print_warning "For production, use cert-distribute.sh with centralized CA management"
+        
+        # Generate CA certificate
+        openssl genrsa -out "$cert_dir/ca.key" 4096
+        openssl req -new -x509 -days 3650 -key "$cert_dir/ca.key" \
+            -out "$cert_dir/ca.crt" \
+            -subj "/CN=Mandau CA/O=Mandau/C=US" -nodes
+    fi
 
     # Generate Core certificate
+    print_status "Generating core server certificate for $core_hostname ($core_ip)..."
     openssl genrsa -out "$cert_dir/core.key" 4096
     openssl req -new -key "$cert_dir/core.key" \
         -out "$cert_dir/core.csr" \
         -subj "/CN=mandau-core/O=Mandau/C=US" -nodes
 
     cat > "$cert_dir/core.ext" <<EOF
-subjectAltName = DNS:mandau-core,DNS:localhost,IP:127.0.0.1
+subjectAltName = DNS:${core_hostname},DNS:localhost,IP:${core_ip},IP:127.0.0.1
 extendedKeyUsage = serverAuth,clientAuth
 EOF
 
@@ -128,13 +157,14 @@ EOF
         -days 365 -extfile "$cert_dir/core.ext"
 
     # Generate Agent certificate
+    print_status "Generating agent certificate for $agent_hostname ($agent_ip)..."
     openssl genrsa -out "$cert_dir/agent.key" 4096
     openssl req -new -key "$cert_dir/agent.key" \
         -out "$cert_dir/agent.csr" \
-        -subj "/CN=mandau-agent/O=Mandau/C=US" -nodes
+        -subj "/CN=${agent_hostname}/O=Mandau/C=US" -nodes
 
     cat > "$cert_dir/agent.ext" <<EOF
-subjectAltName = DNS:mandau-agent,DNS:localhost,IP:127.0.0.1
+subjectAltName = DNS:${agent_hostname},DNS:mandau-agent,DNS:localhost,IP:${agent_ip},IP:127.0.0.1
 extendedKeyUsage = serverAuth,clientAuth
 EOF
 
@@ -144,6 +174,7 @@ EOF
         -days 365 -extfile "$cert_dir/agent.ext"
 
     # Generate CLI client certificate
+    print_status "Generating CLI client certificate..."
     openssl genrsa -out "$cert_dir/client.key" 4096
     openssl req -new -key "$cert_dir/client.key" \
         -out "$cert_dir/client.csr" \
@@ -163,18 +194,21 @@ EOF
     chmod 644 "$cert_dir"/*.crt "$cert_dir"/*.ext "$cert_dir"/ca.srl
 
     # Set ownership to the original user
-    chown "$original_user:$original_user" "$cert_dir"/*
-    
+    chown -R "$original_user:$original_user" "$cert_dir"
+
     print_success "Certificates generated in $cert_dir"
+    print_status "Core server: $core_hostname ($core_ip)"
+    print_status "Agent server: $agent_hostname ($agent_ip)"
 }
 
 # Create systemd service files with absolute paths
 create_systemd_services() {
     local original_user="$1"
     local original_home="$2"
-    
+    local core_port="${MANDAU_CORE_PORT:-9443}"
+
     print_status "Creating systemd service files with absolute paths..."
-    
+
     # Create mandau-core.service
     cat > "/tmp/mandau-core.service" << EOF
 [Unit]
@@ -186,7 +220,8 @@ Requires=docker.service
 Type=simple
 User=$original_user
 Group=$original_user
-ExecStart=/usr/local/bin/mandau-core --listen :8443 --cert $original_home/mandau-certs/core.crt --key $original_home/mandau-certs/core.key --ca $original_home/mandau-certs/ca.crt
+Environment="MANDAU_ADMIN_USER=${MANDAU_ADMIN_USER:-admin}"
+ExecStart=/usr/local/bin/mandau-core --listen :${core_port} --cert $original_home/.mandau/certs/core.crt --key $original_home/.mandau/certs/core.key --ca $original_home/.mandau/certs/ca.crt
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -214,7 +249,7 @@ Wants=mandau-core.service
 Type=simple
 User=$original_user
 Group=$original_user
-ExecStart=/usr/local/bin/mandau-agent --server localhost:8443 --cert $original_home/mandau-certs/agent.crt --key $original_home/mandau-certs/agent.key --ca $original_home/mandau-certs/ca.crt --stack-root $original_home/mandau-stacks
+ExecStart=/usr/local/bin/mandau-agent --server localhost:${core_port} --cert $original_home/.mandau/certs/agent.crt --key $original_home/.mandau/certs/agent.key --ca $original_home/.mandau/certs/ca.crt --stack-root $original_home/mandau-stacks
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -253,9 +288,10 @@ EOF
 create_default_config() {
     local original_user="$1"
     local original_home="$2"
-    
+    local core_port="${MANDAU_CORE_PORT:-9443}"
+
     print_status "Creating default configuration with profile support..."
-    
+
     CONFIG_DIR="$original_home/.mandau"
     mkdir -p "$CONFIG_DIR"
 
@@ -264,26 +300,26 @@ create_default_config() {
 # Mandau Unified Configuration with Profile Support
 # This is the default profile (production)
 server:
-  listen_addr: "localhost:8443"  # For core server: address to listen on; For client: remote server address
+  listen_addr: "localhost:${core_port}"  # For core server: address to listen on; For client: remote server address
   tls:
-    cert_path: "$original_home/mandau-certs/client.crt"  # Client certificate
-    key_path: "$original_home/mandau-certs/client.key"   # Client key
-    ca_path: "$original_home/mandau-certs/ca.crt"        # CA certificate
+    cert_path: "$original_home/.mandau/certs/client.crt"  # Client certificate
+    key_path: "$original_home/.mandau/certs/client.key"   # Client key
+    ca_path: "$original_home/.mandau/certs/ca.crt"        # CA certificate
     min_version: "TLS1.3"
     server_name: "mandau-core"
 timeout: "30s"
-# For remote server usage, update server.listen_addr to your remote server (e.g., "myserver.com:8443")
+# For remote server usage, update server.listen_addr to your remote server (e.g., "myserver.com:${core_port}")
 EOF
 
     # Create development profile
     cat > "$CONFIG_DIR/dev.yaml" << EOF
 # Development Profile Configuration
 server:
-  listen_addr: "localhost:8443"
+  listen_addr: "localhost:${core_port}"
   tls:
-    cert_path: "$original_home/mandau-certs/client.crt"
-    key_path: "$original_home/mandau-certs/client.key"
-    ca_path: "$original_home/mandau-certs/ca.crt"
+    cert_path: "$original_home/.mandau/certs/client.crt"
+    key_path: "$original_home/.mandau/certs/client.key"
+    ca_path: "$original_home/.mandau/certs/ca.crt"
     min_version: "TLS1.3"
     server_name: "mandau-core"
 timeout: "30s"
@@ -294,11 +330,11 @@ EOF
     cat > "$CONFIG_DIR/local.yaml" << EOF
 # Local Development Profile Configuration
 server:
-  listen_addr: "localhost:8443"
+  listen_addr: "localhost:${core_port}"
   tls:
-    cert_path: "$original_home/mandau-certs/client.crt"
-    key_path: "$original_home/mandau-certs/client.key"
-    ca_path: "$original_home/mandau-certs/ca.crt"
+    cert_path: "$original_home/.mandau/certs/client.crt"
+    key_path: "$original_home/.mandau/certs/client.key"
+    ca_path: "$original_home/.mandau/certs/ca.crt"
     min_version: "TLS1.3"
     server_name: "mandau-core"
 timeout: "10s"
@@ -527,9 +563,9 @@ download_and_install() {
 
     # Get the home directory for the original user
     ORIGINAL_HOME=$(eval echo ~$ORIGINAL_USER)
-    
-    # Generate certificates in the first-class location
-    generate_certificates "$ORIGINAL_HOME/mandau-certs" "$ORIGINAL_USER"
+
+    # Generate certificates in the standard location
+    generate_certificates "$ORIGINAL_HOME/.mandau/certs" "$ORIGINAL_USER"
 
     # Create default configuration with profile support
     create_default_config "$ORIGINAL_USER" "$ORIGINAL_HOME"
@@ -543,10 +579,11 @@ download_and_install() {
     chmod 755 "$ORIGINAL_HOME/mandau-stacks"
 
     print_success "Mandau installation completed successfully!"
-    print_status "Certificates are in ~/mandau-certs/ (first-class location)"
+    print_status "Certificates are in ~/.mandau/certs/ (standard location)"
     print_status "Configuration is in ~/.mandau/ with profile support"
     print_status "Stacks directory created at ~/mandau-stacks/"
     print_status "Systemd services created with absolute paths"
+    print_status "Default core port: ${MANDAU_CORE_PORT:-9443}"
 
     # Return to original directory and cleanup
     cd - >/dev/null
@@ -593,6 +630,10 @@ main() {
     print_status "Installation complete! Run 'mandau --help' to get started."
     print_status "For development: Use MANDAU_PROFILE=dev to use development configuration"
     print_status "For systemd services: Run 'sudo systemctl enable mandau-core mandau-agent' and 'sudo systemctl start mandau-core'"
+    print_status "Environment variables for customization:"
+    print_status "  MANDAU_CORE_PORT=${MANDAU_CORE_PORT:-9443}"
+    print_status "  MANDAU_CA_CERT=${MANDAU_CA_CERT:-<not set>}"
+    print_status "  MANDAU_CA_KEY=${MANDAU_CA_KEY:-<not set>}"
 }
 
 # Run main function

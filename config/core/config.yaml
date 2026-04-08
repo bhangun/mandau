@@ -1,9 +1,9 @@
 server:
-  listen_addr: ":8443"
+  listen_addr: ":9443"
   tls:
-    cert_path: "certs/core.crt"
-    key_path: "certs/core.key"
-    ca_path: "certs/ca.crt"
+    cert_path: "~/.mandau/certs/core.crt"
+    key_path: "~/.mandau/certs/core.key"
+    ca_path: "~/.mandau/certs/ca.crt"
     min_version: "TLS1.3"
     server_name: "mandau-core"
 

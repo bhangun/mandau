@@ -279,9 +279,6 @@ func (fm *FailoverManager) checkNodeHealth(node *CoreNode) bool {
 		return false
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), fm.config.HealthCheckTimeout)
-	defer cancel()
-
 	// Try a simple gRPC call to check connectivity
 	// Using GetState as a health check
 	state := conn.GetState()

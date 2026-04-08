@@ -905,40 +905,54 @@ func loadPlugins(registry *plugin.Registry) {
 - Log streaming: 10k+ lines/sec
 - API throughput: 1000+ req/sec
 - Memory: <100MB idle, <256MB under load
+Security Comparison: SSH Keys vs Mandau's mTLS
 
-## 🛣️ Roadmap
+    Mandau's mTLS mechanism is more secure for this use case. Here's why:
 
-**Phase 1: Core (Current)**
-- ✅ Agent & Core implementation
-- ✅ Stack management
-- ✅ Plugin system
-- ✅ Security interceptors
-- ✅ Audit logging
 
-**Phase 2: Advanced Features**
-- [ ] Multi-architecture support (ARM64)
-- [ ] Image registry management
-- [ ] Volume management
-- [ ] Network management
-- [ ] Backup/restore operations
-- [ ] Rolling updates
+    ┌────────────────────────┬──────────────────────────────────────┬─────────────────────────────────────────────┐
+    │ Aspect                 │ SSH Public Keys                      │ Mandau mTLS                                 │
+    ├────────────────────────┼──────────────────────────────────────┼─────────────────────────────────────────────┤
+    │ Authentication         │ One-way (client proves identity)     │ Mutual - both sides prove identity          │
+    │ Encryption             │ Yes (after auth)                     │ TLS 1.3 only (stronger)                     │
+    │ Certificate validation │ N/A (key-based)                      │ Full chain of trust with CA                 │
+    │ Authorization          │ Binary (access or no access)         │ RBAC with granular permissions              │
+    │ Audit trail            │ Limited (login/logout)               │ Full audit logging per operation            │
+    │ Revocation             │ Manual (remove from authorized_keys) │ Certificate revocation via CA               │
+    │ Scope                  │ Full shell access                    │ Least privilege - only exposed gRPC methods │
+    │ Network exposure       │ SSH port (22) - heavily attacked     │ Custom port, mTLS required                  │
+    │ Credential rotation    │ Manual                               │ Can be automated with short-lived certs     │
+    └────────────────────────┴──────────────────────────────────────┴─────────────────────────────────────────────┘
 
-**Phase 3: UI & Integrations**
-- [ ] Flutter desktop application
-- [ ] Web UI (optional)
-- [ ] Prometheus metrics exporter
-- [ ] Grafana dashboards
-- [ ] Slack/Discord notifications
-- [ ] Git-based stack sync
 
-**Phase 4: Enterprise**
-- [ ] Multi-tenancy
-- [ ] Cost tracking
-- [ ] Compliance reporting
-- [ ] Advanced policy engine
-- [ ] SSO integration (OIDC)
+    Mandau's Security Layers (from the code):
 
-## 📝 Configuration Examples
+     1 ┌─────────────────────────────────────┐
+     2 │ 1. mTLS (mutual authentication)     │ ← Both sides verify certificates
+     3 │ 2. Auth Interceptor                 │ ← Plugin-based auth (RBAC)
+     4 │ 3. Policy Interceptor               │ ← Per-request authorization
+     5 │ 4. Audit Interceptor                │ ← Every action logged
+     6 │ 5. Recovery Interceptor             │ ← Panic recovery
+     7 └─────────────────────────────────────┘
+
+    When SSH keys make sense:
+     - Human operators accessing servers interactively
+     - Bootstrap/trust-on-first-use scenarios
+     - Simpler infrastructure with fewer moving parts
+
+    When mTLS (Mandau) is better:
+     - Service-to-service communication (agent ↔ core)
+     - Granular access control (not all-or-nothing)
+     - Compliance requirements (audit trails, revocation)
+     - Zero-trust architectures (verify every request)
+
+    Recommendation:
+    Use both, but for different purposes:
+     - SSH keys → human admin access to servers
+     - Mandau mTLS → automated agent-to-core communication
+
+    Mandau's approach is purpose-built for infrastructure management with defense-in-depth, while SSH is a
+    general-purpose remote access tool.
 
 ### RBAC Configuration
 

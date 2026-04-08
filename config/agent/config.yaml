@@ -9,18 +9,18 @@ agent:
 server:
   listen_addr: ":8444"
   tls:
-    cert_path: "certs/agent.crt"
-    key_path: "certs/agent.key"
-    ca_path: "certs/ca.crt"
+    cert_path: "~/.mandau/certs/agent.crt"
+    key_path: "~/.mandau/certs/agent.key"
+    ca_path: "~/.mandau/certs/ca.crt"
     min_version: "TLS1.3"
     server_name: "mandau-agent"
 
 server_connection:
-  core_addr: "localhost:8443"
+  core_addr: "localhost:9443"
   tls:
-    cert_path: "certs/agent.crt"
-    key_path: "certs/agent.key"
-    ca_path: "certs/ca.crt"
+    cert_path: "~/.mandau/certs/agent.crt"
+    key_path: "~/.mandau/certs/agent.key"
+    ca_path: "~/.mandau/certs/ca.crt"
     min_version: "TLS1.3"
     server_name: "mandau-core"
 

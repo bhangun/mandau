@@ -2,6 +2,8 @@ package config
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -86,6 +88,21 @@ type AgentManagementConfig struct {
 	AutoDeregister    bool   `yaml:"auto_deregister"`
 }
 
+// expandPath expands home directory (~) and $HOME in paths
+func expandPath(p string) string {
+	homeDir, _ := os.UserHomeDir()
+	
+	// Expand ~ at the beginning
+	if strings.HasPrefix(p, "~") {
+		p = filepath.Join(homeDir, p[1:])
+	}
+	
+	// Expand $HOME
+	p = strings.ReplaceAll(p, "$HOME", homeDir)
+	
+	return p
+}
+
 // LoadCoreConfig loads the core server configuration from a YAML file
 func LoadCoreConfig(configPath string) (*CoreConfig, error) {
 	data, err := os.ReadFile(configPath)
@@ -103,6 +120,11 @@ func LoadCoreConfig(configPath string) (*CoreConfig, error) {
 		config.PluginDir = "/usr/lib/mandau/plugins"
 	}
 
+	// Expand home directory in paths
+	config.Server.TLS.CertPath = expandPath(config.Server.TLS.CertPath)
+	config.Server.TLS.KeyPath = expandPath(config.Server.TLS.KeyPath)
+	config.Server.TLS.CAPath = expandPath(config.Server.TLS.CAPath)
+
 	return &config, nil
 }
 
@@ -117,6 +139,14 @@ func LoadAgentConfig(configPath string) (*AgentConfig, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, err
 	}
+
+	// Expand home directory in paths
+	config.Server.TLS.CertPath = expandPath(config.Server.TLS.CertPath)
+	config.Server.TLS.KeyPath = expandPath(config.Server.TLS.KeyPath)
+	config.Server.TLS.CAPath = expandPath(config.Server.TLS.CAPath)
+	config.ServerConnection.TLS.CertPath = expandPath(config.ServerConnection.TLS.CertPath)
+	config.ServerConnection.TLS.KeyPath = expandPath(config.ServerConnection.TLS.KeyPath)
+	config.ServerConnection.TLS.CAPath = expandPath(config.ServerConnection.TLS.CAPath)
 
 	return &config, nil
 }
@@ -175,11 +205,11 @@ users:
 
 	return &CoreConfig{
 		Server: ServerConfig{
-			ListenAddr: ":8443",
+			ListenAddr: ":9443",
 			TLS: TLSConfig{
-				CertPath:   "certs/core.crt",
-				KeyPath:    "certs/core.key",
-				CAPath:     "certs/ca.crt",
+				CertPath:   "~/.mandau/certs/core.crt",
+				KeyPath:    "~/.mandau/certs/core.key",
+				CAPath:     "~/.mandau/certs/ca.crt",
 				MinVersion: "TLS1.3",
 				ServerName: "mandau-core",
 			},
@@ -243,19 +273,19 @@ users:
 		Server: ServerConfig{
 			ListenAddr: ":8444", // Default agent listen port
 			TLS: TLSConfig{
-				CertPath:   "certs/agent.crt",
-				KeyPath:    "certs/agent.key",
-				CAPath:     "certs/ca.crt",
+				CertPath:   "~/.mandau/certs/agent.crt",
+				KeyPath:    "~/.mandau/certs/agent.key",
+				CAPath:     "~/.mandau/certs/ca.crt",
 				MinVersion: "TLS1.3",
 				ServerName: "mandau-agent",
 			},
 		},
 		ServerConnection: ServerConnectionConfig{
-			CoreAddr: "localhost:8443",
+			CoreAddr: "localhost:9443",
 			TLS: TLSConfig{
-				CertPath:   "certs/agent.crt",
-				KeyPath:    "certs/agent.key",
-				CAPath:     "certs/ca.crt",
+				CertPath:   "~/.mandau/certs/agent.crt",
+				KeyPath:    "~/.mandau/certs/agent.key",
+				CAPath:     "~/.mandau/certs/ca.crt",
 				MinVersion: "TLS1.3",
 				ServerName: "mandau-core",
 			},
