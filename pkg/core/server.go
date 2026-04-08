@@ -4,17 +4,21 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
 	agentv1 "github.com/bhangun/mandau/api/v1"
+	"github.com/bhangun/mandau/pkg/auth"
 	"github.com/bhangun/mandau/pkg/config"
 	"github.com/bhangun/mandau/pkg/plugin"
+	"github.com/bhangun/mandau/pkg/web"
 	"github.com/bhangun/mandau/plugins/auth/rbac"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -180,7 +184,7 @@ func (c *Core) Serve() error {
 	}
 
 	// Load CA certificate to verify client certificates
-	caCert, err := ioutil.ReadFile(c.config.CAPath)
+	caCert, err := os.ReadFile(c.config.CAPath)
 	if err != nil {
 		return fmt.Errorf("load CA cert: %w", err)
 	}
@@ -205,6 +209,15 @@ func (c *Core) Serve() error {
 			c.authInterceptor,
 			c.auditInterceptor,
 		),
+		// Configure server-side keepalive to allow client pings
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    30 * time.Second, // Send keepalive ping every 30s
+			Timeout: 10 * time.Second, // Wait 10s for response
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             10 * time.Second, // Allow client pings as frequent as 10s
+			PermitWithoutStream: true,             // Allow pings even with no active streams
+		}),
 	)
 
 	// Register Core API services
@@ -223,6 +236,65 @@ func (c *Core) Serve() error {
 	defer cancel()
 
 	go c.monitorAgents(ctx)
+
+	// Start web dashboard on port 8080
+	webPort := "8080"
+	go func() {
+		// Load auth config from environment variables with secure defaults
+		jwtSecret := os.Getenv("MANDAU_JWT_SECRET")
+		if jwtSecret == "" {
+			// Generate a random secret if not provided
+			key, err := auth.GenerateSecretKey()
+			if err != nil {
+				log.Printf("Failed to generate JWT secret: %v", err)
+				return
+			}
+			jwtSecret = base64.StdEncoding.EncodeToString(key)
+		}
+
+		adminUser := os.Getenv("MANDAU_ADMIN_USER")
+		if adminUser == "" {
+			adminUser = "admin"
+		}
+
+		adminPass := os.Getenv("MANDAU_ADMIN_PASS")
+		if adminPass == "" {
+			// Generate random password if not provided
+			key, err := auth.GenerateSecretKey()
+			if err != nil {
+				log.Printf("Failed to generate admin password: %v", err)
+				return
+			}
+			adminPass = base64.StdEncoding.EncodeToString(key)[:16]
+			log.Printf("Generated random admin password: %s (set MANDAU_ADMIN_PASS env var)", adminPass)
+		}
+
+		authMW := auth.NewMiddleware(auth.Config{
+			SecretKey:     []byte(jwtSecret),
+			TokenExpiry:   24 * time.Hour,
+			AdminUsername: adminUser,
+			AdminPassword: adminPass,
+		})
+
+		webHandler := web.Handler(c, authMW)
+		addr := fmt.Sprintf(":%s", webPort)
+		log.Printf("Web dashboard starting on %s (auth enabled, user: %s)", addr, adminUser)
+		if err := http.ListenAndServe(addr, webHandler); err != nil {
+			log.Printf("Web dashboard error: %v", err)
+		}
+	}()
+
+	// Start WebSocket server for agent connections on port 8445
+	wsPort := "8445"
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/ws", c.HandleWebSocket)
+		addr := fmt.Sprintf(":%s", wsPort)
+		log.Printf("WebSocket server starting on %s", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil {
+			log.Printf("WebSocket server error: %v", err)
+		}
+	}()
 
 	// Graceful shutdown
 	go func() {
@@ -269,6 +341,28 @@ func (c *Core) RegisterAgent(ctx context.Context, req *agentv1.RegisterRequest) 
 		AgentId:           agentID,
 		HeartbeatInterval: durationpb.New(30 * time.Second),
 	}, nil
+}
+
+// ListAgentsJSON returns agents as JSON for the REST API
+func (c *Core) ListAgentsJSON() (interface{}, error) {
+	c.agents.mu.RLock()
+	defer c.agents.mu.RUnlock()
+
+	agents := make([]map[string]interface{}, 0)
+	for _, conn := range c.agents.agents {
+		agents = append(agents, map[string]interface{}{
+			"id":           conn.ID,
+			"hostname":     conn.Hostname,
+			"address":      conn.Address,
+			"status":       string(conn.Status),
+			"last_seen":    conn.LastSeen,
+			"capabilities": conn.Capabilities,
+			"labels":       conn.Labels,
+			"stacks":       conn.Stacks,
+		})
+	}
+
+	return agents, nil
 }
 
 // ListAgents returns all registered agents
@@ -393,7 +487,7 @@ func (c *Core) getAgentConnection(agentID string) (*AgentConnection, error) {
 		}
 
 		// Load CA certificate to verify agent certificates
-		caCert, err := ioutil.ReadFile(c.config.CAPath)
+		caCert, err := os.ReadFile(c.config.CAPath)
 		if err != nil {
 			return nil, fmt.Errorf("load CA cert for agent connection: %w", err)
 		}
