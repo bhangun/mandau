@@ -39,36 +39,61 @@ Mandau is a secure, operator-grade control plane for managing Docker infrastruct
 - Progress tracking
 - Cancellable tasks
 - Automatic retries
+- Persistent operation queuing for disconnected scenarios
+
+✅ **High Availability**
+- Multi-core server support with automatic failover
+- Health monitoring and automatic reconnection
+- Priority-based server selection
+- Zero-downtime core server upgrades
+
+✅ **Web Dashboard**
+- Modern responsive web interface
+- Real-time monitoring and management
+- Agent, stack, container, and operations views
+- Live log streaming
+- No CLI required for basic operations
+
+✅ **Transport Flexibility**
+- Primary gRPC transport with mTLS
+- Automatic WebSocket fallback when gRPC fails
+- Configurable transport timeouts and retries
+- Works through restrictive proxies and firewalls
 
 ## 🏗️ Architecture
 
 ```
-┌──────────────────────┐
-│   UI Clients         │
-│  - Flutter Desktop   │
-│  - CLI               │
-│  - Web (optional)    │
-└──────────┬───────────┘
-           │
-           │ mTLS/gRPC
-           ▼
-┌──────────────────────┐
-│   Mandau Core        │
-│  - Agent registry    │
-│  - Auth & RBAC       │
-│  - Audit logging     │
-│  - Policy engine     │
-└──────────┬───────────┘
-           │
-           │ mTLS/gRPC
-           ▼
-┌──────────────────────┐
-│   Mandau Agent       │
-│  - Docker control    │
-│  - Stack management  │
-│  - File system       │
-│  - Container exec    │
-└──────────────────────┘
+┌──────────────────────────────────────────┐
+│   UI Clients                             │
+│  - Flutter Desktop                       │
+│  - CLI                                   │
+│  - **Web Dashboard (NEW: Port 8080)**    │
+└──────────────┬───────────────────────────┘
+               │
+               │ mTLS/gRPC (primary)
+               │ WebSocket (fallback)
+               ▼
+┌──────────────────────────────────────────┐
+│   Mandau Core (HA Support)               │
+│  - Agent registry                        │
+│  - Auth & RBAC                           │
+│  - Audit logging                         │
+│  - Policy engine                         │
+│  - **Multi-node failover (NEW)**         │
+└──────────────┬───────────────────────────┘
+               │
+               │ mTLS/gRPC
+               │ **Auto-reconnect + Queue (NEW)**
+               ▼
+┌──────────────────────────────────────────┐
+│   Mandau Agent                           │
+│  - Docker control                        │
+│  - Stack management                      │
+│  - File system                           │
+│  - Container exec                        │
+│  - **Operation queue (NEW)**             │
+│  - **WebSocket fallback (NEW)**          │
+└──────────────────────────────────────────┘
 ```
 
 ## 📦 Components Delivered
@@ -146,100 +171,68 @@ Mandau is a secure, operator-grade control plane for managing Docker infrastruct
 - Certificate generation scripts
 - Security-hardened configurations
 
+### 9. **Transport Layer** (`pkg/transport/`) **NEW**
+- gRPC primary transport with mTLS
+- WebSocket fallback for restrictive networks
+- Automatic transport failover and reconnection
+- Configurable timeouts and keepalive
+- Works through HTTP proxies
+
+### 10. **Operation Queue** (`pkg/agent/queue/`) **NEW**
+- Persistent disk-based operation queue
+- Automatic retry on reconnection
+- Configurable retry limits
+- Queue persistence across restarts
+- Perfect for disconnected/intermittent scenarios
+
+### 11. **High Availability Manager** (`pkg/ha/`) **NEW**
+- Multi-core server support
+- Priority-based server selection
+- Automatic health monitoring
+- Seamless failover between core nodes
+- Zero-downtime core server maintenance
+
+### 12. **Web Dashboard** (`web/` and `pkg/web/`) **NEW**
+- Modern responsive web interface
+- Real-time monitoring dashboard
+- Agent management and health monitoring
+- Stack deployment and management
+- Container operations
+- Live log streaming
+- Accessible at `http://localhost:8080` when core is running
+
 ## 🚀 Quick Start
 
-### 1. Build
+### 1. Install (One Command)
 
+**Linux/macOS:**
 ```bash
-make build
+curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | sudo bash
 ```
 
-### 2. Generate Certificates
+**Windows (PowerShell):**
+```powershell
+Invoke-WebRequest -Uri "https://github.com/bhangun/mandau/releases/latest/download/install.sh" -OutFile "install.sh"
+bash install.sh
+```
+
+This will:
+- ✅ Auto-detect your OS and architecture
+- ✅ Download the latest release binaries
+- ✅ Install to `/usr/local/bin/`
+- ✅ Generate TLS certificates in `~/mandau-certs/`
+- ✅ Create configuration in `~/.mandau/`
+- ✅ Set up systemd services (Linux)
+
+See [INSTALL.md](INSTALL.md) for detailed platform-specific instructions.
+
+### 2. Generate Certificates (if not done by installer)
 
 ```bash
 make certs
 ```
 
-### 3. Installation Options
-
-#### Option A: Install using curl (Recommended)
-
-Install Mandau directly using the curl command. This method automatically detects your platform and installs the appropriate binaries with enhanced configuration.
-
-**Important**: The installation requires sudo privileges to install to `/usr/local/bin/`.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | sudo bash
-```
-
-**What the installation script does (Enhanced):**
-- Detects your operating system and architecture (Linux/macOS: amd64/arm64, Windows: amd64)
-- Fetches the latest release version from GitHub API
-- Downloads the appropriate binary package for your platform
-- Extracts and makes binaries executable
-- Installs `mandau`, `mandau-core`, and `mandau-agent` to `/usr/local/bin/`
-- **NEW**: Generates certificates in `~/mandau-certs/` (first-class location)
-- **NEW**: Creates configuration profiles in `~/.mandau/` with dev/test/prod support
-- **NEW**: Sets up systemd services with absolute paths for reliable operation
-- **NEW**: Creates `~/mandau-stacks/` directory for stack management
-
-**Alternative curl command with explicit sudo:**
-```bash
-# If the pipe method doesn't work, download and run separately:
-curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh -o install.sh
-sudo bash install.sh
-rm install.sh
-```
-
-#### Option B: Install from Binary Release (Manual)
-
-Download the appropriate binary package for your platform from the [releases page](https://github.com/bhangun/mandau/releases). Each release includes pre-built static binaries for:
-
-- Linux AMD64/ARM64
-- macOS AMD64/ARM64
-- Windows AMD64
-
-**Manual Installation for Linux/macOS:**
-```bash
-# Download and extract the archive for your platform
-# Example for Linux AMD64:
-VERSION=v0.0.6  # Replace with the latest version from https://github.com/bhangun/mandau/releases
-wget https://github.com/bhangun/mandau/releases/download/${VERSION}/mandau-linux-amd64-${VERSION}.tar.gz
-tar -xzf mandau-linux-amd64-${VERSION}.tar.gz
-
-# Make binaries executable and move to PATH
-sudo chmod +x mandau mandau-core mandau-agent
-sudo mv mandau mandau-core mandau-agent /usr/local/bin/
-```
-
-**For Windows:**
-```powershell
-# Download the zip file for Windows AMD64 from the releases page
-# Example using PowerShell:
-$version = "v0.0.6"  # Replace with the latest version
-$downloadUrl = "https://github.com/bhangun/mandau/releases/download/$version/mandau-windows-amd64-$version.zip"
-$outputPath = "$env:TEMP\mandau-windows-amd64-$version.zip"
-Invoke-WebRequest -Uri $downloadUrl -OutFile $outputPath
-
-# Extract the zip file
-Expand-Archive -Path $outputPath -DestinationPath "$env:TEMP\mandau"
-# Copy mandau.exe, mandau-core.exe, and mandau-agent.exe to a directory in your PATH
-# Or add the extracted directory to your PATH environment variable
-```
-
-#### Option C: Build from Source (Development)
-
-```bash
-git clone https://github.com/bhangun/mandau.git
-cd mandau
-make build
-sudo make install
-```
-
-**Build Requirements:**
-- Go 1.21 or higher
-- protoc (Protocol Buffers compiler) for generating gRPC code
-- Docker (for testing)
+### 3. Build from Source (Development)
 
 ### 4. Post-Installation Setup
 
@@ -452,6 +445,27 @@ mandau-agent \
   --ca ~/mandau-certs/ca.crt \
   --stack-root ~/mandau-stacks
 ```
+
+### 5c. Access Web Dashboard (NEW!)
+
+Once Mandau Core is running, you can access the web dashboard:
+
+```bash
+# Open in browser
+open http://localhost:8080
+
+# Or navigate to http://localhost:8080 in your browser
+```
+
+The web dashboard provides:
+- **Dashboard**: Overview of agents, stacks, containers, and operations
+- **Agents**: View and manage connected agents
+- **Stacks**: Deploy and manage Docker Compose stacks
+- **Containers**: View and manage running containers
+- **Operations**: Monitor operation progress and history
+- **Logs**: Real-time log streaming with filtering
+
+**Note**: The web dashboard is served directly from the Mandau Core binary - no additional setup required!
 
 ### 6. Development Workflow (New!)
 

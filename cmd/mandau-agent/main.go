@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/signal"
@@ -20,6 +19,7 @@ import (
 	"github.com/bhangun/mandau/pkg/agent/container"
 	"github.com/bhangun/mandau/pkg/agent/filesystem"
 	"github.com/bhangun/mandau/pkg/agent/operation"
+	"github.com/bhangun/mandau/pkg/agent/queue"
 	"github.com/bhangun/mandau/pkg/agent/stack"
 	"github.com/bhangun/mandau/pkg/config"
 	"github.com/bhangun/mandau/pkg/plugin"
@@ -343,8 +343,15 @@ func NewAgent(cfg *Config) (*Agent, error) {
 		return nil, fmt.Errorf("plugin init: %w", err)
 	}
 
+	// Create operation queue
+	queueDir := filepath.Join(cfg.StackRoot, ".queue")
+	opQueue, err := queue.New(queueDir)
+	if err != nil {
+		return nil, fmt.Errorf("create operation queue: %w", err)
+	}
+
 	// Create managers
-	opMgr := operation.NewManager()
+	opMgr := operation.NewManager(opQueue)
 	stackMgr := stack.NewManager(cfg.StackRoot, docker, opMgr)
 	containerMgr := container.NewManager()
 	fsMgr := filesystem.NewManager()
@@ -386,7 +393,7 @@ func createServerConnection(cfg *Config) (*grpc.ClientConn, error) {
 	}
 
 	// Load CA
-	caCert, err := ioutil.ReadFile(cfg.CAPath)
+	caCert, err := os.ReadFile(cfg.CAPath)
 	if err != nil {
 		return nil, fmt.Errorf("load CA: %w", err)
 	}
@@ -545,7 +552,7 @@ func (a *Agent) Serve() error {
 	}
 
 	// Load CA
-	caCert, err := ioutil.ReadFile(a.config.CAPath)
+	caCert, err := os.ReadFile(a.config.CAPath)
 	if err != nil {
 		return fmt.Errorf("load CA: %w", err)
 	}
@@ -1211,7 +1218,7 @@ func loadPersistentAgentID() string {
 		return "" // File doesn't exist yet
 	}
 
-	data, err := ioutil.ReadFile(idFile)
+	data, err := os.ReadFile(idFile)
 	if err != nil {
 		fmt.Printf("Warning: could not read agent ID file: %v\n", err)
 		return ""
@@ -1236,7 +1243,7 @@ func savePersistentAgentID(id string) {
 		return
 	}
 
-	if err := ioutil.WriteFile(idFile, []byte(id), 0600); err != nil {
+	if err := os.WriteFile(idFile, []byte(id), 0600); err != nil {
 		fmt.Printf("Warning: could not save agent ID to file: %v\n", err)
 	}
 }

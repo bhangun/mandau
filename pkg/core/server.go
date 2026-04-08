@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -238,18 +239,43 @@ func (c *Core) Serve() error {
 	go c.monitorAgents(ctx)
 
 	// Start web dashboard on port 8080
-	webPort := "8080"
+	webPort := os.Getenv("MANDAU_WEB_PORT")
+	if webPort == "" {
+		webPort = "8080"
+	}
+	
+	var webServer *http.Server
 	go func() {
 		// Load auth config from environment variables with secure defaults
 		jwtSecret := os.Getenv("MANDAU_JWT_SECRET")
 		if jwtSecret == "" {
-			// Generate a random secret if not provided
-			key, err := auth.GenerateSecretKey()
-			if err != nil {
-				log.Printf("Failed to generate JWT secret: %v", err)
-				return
+			// Try to load from disk
+			configDir := os.ExpandEnv("$HOME/.mandau")
+			jwtSecretFile := filepath.Join(configDir, "jwt.secret")
+			
+			if data, err := os.ReadFile(jwtSecretFile); err == nil {
+				jwtSecret = strings.TrimSpace(string(data))
+				log.Printf("Loaded JWT secret from %s", jwtSecretFile)
+			} else {
+				// Generate and persist a random secret
+				key, err := auth.GenerateSecretKey()
+				if err != nil {
+					log.Printf("Failed to generate JWT secret: %v", err)
+					return
+				}
+				jwtSecret = base64.StdEncoding.EncodeToString(key)
+				
+				// Save to disk
+				if err := os.MkdirAll(configDir, 0700); err != nil {
+					log.Printf("Failed to create config directory: %v", err)
+					return
+				}
+				if err := os.WriteFile(jwtSecretFile, []byte(jwtSecret), 0600); err != nil {
+					log.Printf("Failed to save JWT secret: %v", err)
+					return
+				}
+				log.Printf("Generated and saved JWT secret to %s", jwtSecretFile)
 			}
-			jwtSecret = base64.StdEncoding.EncodeToString(key)
 		}
 
 		adminUser := os.Getenv("MANDAU_ADMIN_USER")
@@ -259,14 +285,33 @@ func (c *Core) Serve() error {
 
 		adminPass := os.Getenv("MANDAU_ADMIN_PASS")
 		if adminPass == "" {
-			// Generate random password if not provided
-			key, err := auth.GenerateSecretKey()
-			if err != nil {
-				log.Printf("Failed to generate admin password: %v", err)
-				return
+			// Try to load from disk
+			configDir := os.ExpandEnv("$HOME/.mandau")
+			adminPassFile := filepath.Join(configDir, "admin.password")
+			
+			if data, err := os.ReadFile(adminPassFile); err == nil {
+				adminPass = strings.TrimSpace(string(data))
+				log.Printf("Loaded admin password from %s", adminPassFile)
+			} else {
+				// Generate and persist a random password
+				key, err := auth.GenerateSecretKey()
+				if err != nil {
+					log.Printf("Failed to generate admin password: %v", err)
+					return
+				}
+				adminPass = base64.StdEncoding.EncodeToString(key)[:16]
+				
+				// Save to disk
+				if err := os.MkdirAll(configDir, 0700); err != nil {
+					log.Printf("Failed to create config directory: %v", err)
+					return
+				}
+				if err := os.WriteFile(adminPassFile, []byte(adminPass), 0600); err != nil {
+					log.Printf("Failed to save admin password: %v", err)
+					return
+				}
+				log.Printf("Generated and saved admin password to %s", adminPassFile)
 			}
-			adminPass = base64.StdEncoding.EncodeToString(key)[:16]
-			log.Printf("Generated random admin password: %s (set MANDAU_ADMIN_PASS env var)", adminPass)
 		}
 
 		authMW := auth.NewMiddleware(auth.Config{
@@ -278,20 +323,27 @@ func (c *Core) Serve() error {
 
 		webHandler := web.Handler(c, authMW)
 		addr := fmt.Sprintf(":%s", webPort)
+		webServer = &http.Server{Addr: addr, Handler: webHandler}
 		log.Printf("Web dashboard starting on %s (auth enabled, user: %s)", addr, adminUser)
-		if err := http.ListenAndServe(addr, webHandler); err != nil {
+		if err := webServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("Web dashboard error: %v", err)
 		}
 	}()
 
 	// Start WebSocket server for agent connections on port 8445
-	wsPort := "8445"
+	wsPort := os.Getenv("MANDAU_WS_PORT")
+	if wsPort == "" {
+		wsPort = "8445"
+	}
+	
+	var wsServer *http.Server
 	go func() {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/ws", c.HandleWebSocket)
 		addr := fmt.Sprintf(":%s", wsPort)
+		wsServer = &http.Server{Addr: addr, Handler: mux}
 		log.Printf("WebSocket server starting on %s", addr)
-		if err := http.ListenAndServe(addr, mux); err != nil {
+		if err := wsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("WebSocket server error: %v", err)
 		}
 	}()
@@ -301,6 +353,25 @@ func (c *Core) Serve() error {
 		// Wait for interrupt signal
 		<-ctx.Done()
 		log.Println("Shutting down server...")
+		
+		// Gracefully shutdown HTTP servers
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
+		
+		if webServer != nil {
+			log.Println("Shutting down web dashboard...")
+			if err := webServer.Shutdown(shutdownCtx); err != nil {
+				log.Printf("Web dashboard shutdown error: %v", err)
+			}
+		}
+		
+		if wsServer != nil {
+			log.Println("Shutting down WebSocket server...")
+			if err := wsServer.Shutdown(shutdownCtx); err != nil {
+				log.Printf("WebSocket server shutdown error: %v", err)
+			}
+		}
+		
 		server.GracefulStop()
 	}()
 
@@ -542,6 +613,20 @@ func (c *Core) monitorAgents(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
+	// Get auto-deregister setting from config
+	autoDeregister := false
+	deregisterTimeout := 5 * time.Minute // Default 5 minutes
+	
+	if c.config.FullConfig != nil {
+		autoDeregister = c.config.FullConfig.AgentManagement.AutoDeregister
+		// Parse the offline timeout from config if available
+		if c.config.FullConfig.AgentManagement.OfflineTimeout != "" {
+			if timeout, err := time.ParseDuration(c.config.FullConfig.AgentManagement.OfflineTimeout); err == nil {
+				deregisterTimeout = timeout * 2 // Deregister at 2x the offline timeout
+			}
+		}
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -549,6 +634,8 @@ func (c *Core) monitorAgents(ctx context.Context) {
 		case <-ticker.C:
 			c.agents.mu.Lock()
 
+			var toDeregister []string
+			
 			for id, agent := range c.agents.agents {
 				elapsed := time.Since(agent.LastSeen)
 
@@ -568,6 +655,17 @@ func (c *Core) monitorAgents(ctx context.Context) {
 					agent.Client = nil
 					fmt.Printf("Closed stale connection for offline agent %s\n", id)
 				}
+				
+				// Auto-deregister if enabled and timeout exceeded
+				if autoDeregister && agent.Status == AgentStatusOffline && elapsed > deregisterTimeout {
+					toDeregister = append(toDeregister, id)
+				}
+			}
+			
+			// Remove deregistered agents
+			for _, id := range toDeregister {
+				delete(c.agents.agents, id)
+				log.Printf("Auto-deregistered agent %s (offline for %v)", id, deregisterTimeout)
 			}
 
 			c.agents.mu.Unlock()

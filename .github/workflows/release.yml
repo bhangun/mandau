@@ -18,10 +18,15 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.24'
           cache: true
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler zip
 
       - name: Get tag
         id: tag
@@ -31,62 +36,80 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Install zip tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zip
-
       - name: Build binaries
         run: |
           mkdir -p dist
+          mkdir -p checksums
 
-          # Build for different platforms
-          # Linux AMD64
-          echo "Building Linux AMD64 binaries..."
-          mkdir -p build/linux-amd64
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-amd64/mandau ./cmd/mandau-cli
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-amd64/mandau-core ./cmd/mandau-core
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-amd64/mandau-agent ./cmd/mandau-agent
-          tar -czf dist/mandau-linux-amd64-${{ steps.tag.outputs.version }}.tar.gz -C build/linux-amd64 mandau mandau-core mandau-agent
+          PLATFORMS=(
+            "linux/amd64"
+            "linux/arm64"
+            "darwin/amd64"
+            "darwin/arm64"
+            "windows/amd64"
+          )
 
-          # Linux ARM64
-          echo "Building Linux ARM64 binaries..."
-          mkdir -p build/linux-arm64
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-arm64/mandau ./cmd/mandau-cli
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-arm64/mandau-core ./cmd/mandau-core
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/linux-arm64/mandau-agent ./cmd/mandau-agent
-          tar -czf dist/mandau-linux-arm64-${{ steps.tag.outputs.version }}.tar.gz -C build/linux-arm64 mandau mandau-core mandau-agent
+          for platform in "${PLATFORMS[@]}"; do
+            GOOS="${platform%/*}"
+            GOARCH="${platform#*/}"
+            
+            echo "Building ${GOOS}/${GOARCH} binaries..."
+            mkdir -p "build/${GOOS}-${GOARCH}"
+            
+            # Set binary extension for Windows
+            if [ "$GOOS" = "windows" ]; then
+              EXT=".exe"
+            else
+              EXT=""
+            fi
+            
+            # Build binaries
+            GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 go build \
+              -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" \
+              -o "build/${GOOS}-${GOARCH}/mandau${EXT}" ./cmd/mandau-cli
+            GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 go build \
+              -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" \
+              -o "build/${GOOS}-${GOARCH}/mandau-core${EXT}" ./cmd/mandau-core
+            GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 go build \
+              -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" \
+              -o "build/${GOOS}-${GOARCH}/mandau-agent${EXT}" ./cmd/mandau-agent
 
-          # macOS AMD64
-          echo "Building macOS AMD64 binaries..."
-          mkdir -p build/darwin-amd64
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-amd64/mandau ./cmd/mandau-cli
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-amd64/mandau-core ./cmd/mandau-core
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-amd64/mandau-agent ./cmd/mandau-agent
-          tar -czf dist/mandau-darwin-amd64-${{ steps.tag.outputs.version }}.tar.gz -C build/darwin-amd64 mandau mandau-core mandau-agent
+            # Package binaries
+            if [ "$GOOS" = "windows" ]; then
+              zip -j "dist/mandau-${GOOS}-${GOARCH}-${{ steps.tag.outputs.version }}.zip" \
+                "build/${GOOS}-${GOARCH}/mandau.exe" \
+                "build/${GOOS}-${GOARCH}/mandau-core.exe" \
+                "build/${GOOS}-${GOARCH}/mandau-agent.exe"
+            else
+              tar -czf "dist/mandau-${GOOS}-${GOARCH}-${{ steps.tag.outputs.version }}.tar.gz" \
+                -C "build/${GOOS}-${GOARCH}" mandau mandau-core mandau-agent
+            fi
 
-          # macOS ARM64
-          echo "Building macOS ARM64 binaries..."
-          mkdir -p build/darwin-arm64
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-arm64/mandau ./cmd/mandau-cli
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-arm64/mandau-core ./cmd/mandau-core
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/darwin-arm64/mandau-agent ./cmd/mandau-agent
-          tar -czf dist/mandau-darwin-arm64-${{ steps.tag.outputs.version }}.tar.gz -C build/darwin-arm64 mandau mandau-core mandau-agent
+            # Generate checksums
+            if [ "$GOOS" = "windows" ]; then
+              sha256sum "dist/mandau-${GOOS}-${GOARCH}-${{ steps.tag.outputs.version }}.zip" > "checksums/mandau-${GOOS}-${GOARCH}-${{ steps.tag.outputs.version }}.zip.sha256"
+            else
+              sha256sum "dist/mandau-${GOOS}-${GOARCH}-${{ steps.tag.outputs.version }}.tar.gz" > "checksums/mandau-${GOOS}-${GOARCH}-${{ steps.tag.outputs.version }}.tar.gz.sha256"
+            fi
+          done
 
-          # Windows AMD64
-          echo "Building Windows AMD64 binaries..."
-          mkdir -p build/windows-amd64
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/windows-amd64/mandau.exe ./cmd/mandau-cli
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/windows-amd64/mandau-core.exe ./cmd/mandau-core
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${{ steps.tag.outputs.version }}" -o build/windows-amd64/mandau-agent.exe ./cmd/mandau-agent
-          zip dist/mandau-windows-amd64-${{ steps.tag.outputs.version }}.zip -j build/windows-amd64/mandau.exe build/windows-amd64/mandau-core.exe build/windows-amd64/mandau-agent.exe
+          # Create combined checksums file
+          cat checksums/*.sha256 > dist/SHA256SUMS.txt
+          echo "✅ All binaries built and checksummed"
 
       - name: Copy install script to dist
         run: |
-          cp scripts/install.sh dist/ || echo "install.sh not found in scripts/ directory"
+          cp scripts/install.sh dist/
+          chmod +x dist/install.sh
+          echo "✅ Installation script copied to dist/"
+
+      - name: Verify installation script
+        run: |
+          bash -n scripts/install.sh
+          echo "✅ Installation script syntax valid"
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: Release ${{ steps.tag.outputs.tag }}
@@ -98,28 +121,70 @@ jobs:
             dist/mandau-darwin-amd64-*.tar.gz
             dist/mandau-darwin-arm64-*.tar.gz
             dist/mandau-windows-amd64-*.zip
+            dist/checksums/*.sha256
+            dist/SHA256SUMS.txt
             dist/install.sh
+          generate_release_notes: true
           body: |
-            ## Mandau ${{ steps.tag.outputs.tag }}
+            ## 🗡️ Mandau ${{ steps.tag.outputs.tag }}
 
-            This release includes the following binaries for different platforms:
+            Production-grade, agent-driven Docker infrastructure management for security-sensitive environments.
 
-            - Linux AMD64
-            - Linux ARM64
-            - macOS AMD64
-            - macOS ARM64
-            - Windows AMD64
+            ### 📦 Installation
 
-            ### Installation
-
-            You can install Mandau using the installation script:
-
+            **Quick install (recommended):**
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | bash
+            curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | sudo bash
             ```
 
-            Or download the appropriate archive for your platform and extract the binaries.
+            **Or download binaries for your platform:**
+            - **Linux AMD64**: `mandau-linux-amd64-${{ steps.tag.outputs.version }}.tar.gz`
+            - **Linux ARM64**: `mandau-linux-arm64-${{ steps.tag.outputs.version }}.tar.gz`
+            - **macOS AMD64**: `mandau-darwin-amd64-${{ steps.tag.outputs.version }}.tar.gz`
+            - **macOS ARM64 (Apple Silicon)**: `mandau-darwin-arm64-${{ steps.tag.outputs.version }}.tar.gz`
+            - **Windows AMD64**: `mandau-windows-amd64-${{ steps.tag.outputs.version }}.zip`
 
-            ### Changelog
+            ### 🔐 Verify Checksums
 
-            ${{ env.GITHUB_REF_NAME }}
+            ```bash
+            # Download checksums file
+            curl -fsSL https://github.com/bhangun/mandau/releases/download/${{ steps.tag.outputs.tag }}/SHA256SUMS.txt -o SHA256SUMS.txt
+
+            # Verify your download
+            sha256sum -c SHA256SUMS.txt
+            ```
+
+            ### 🚀 Quick Start
+
+            ```bash
+            # Generate certificates
+            make certs
+
+            # Start Core server
+            mandau-core --listen :8443 --cert ~/mandau-certs/core.crt --key ~/mandau-certs/core.key --ca ~/mandau-certs/ca.crt
+
+            # Start Agent
+            mandau-agent --server localhost:8443 --cert ~/mandau-certs/agent.crt --key ~/mandau-certs/agent.key --ca ~/mandau-certs/ca.crt --stack-root ~/mandau-stacks
+
+            # Access web dashboard
+            open http://localhost:8080
+            ```
+
+            ### ✨ New Features
+
+            - JWT authentication for web dashboard
+            - Rate limiting middleware (5 login attempts/min, 60 API requests/min)
+            - Operation queue for disconnected scenarios
+            - WebSocket fallback transport
+            - Raft-based leader election for HA deployments
+            - REST API with full CRUD operations
+            - TLS utility package for centralized configuration
+            - 56 comprehensive unit tests
+
+            ### 📋 Components
+
+            | Binary | Description |
+            |--------|-------------|
+            | `mandau` | CLI tool for managing infrastructure |
+            | `mandau-core` | Central control plane server |
+            | `mandau-agent` | Agent that runs on Docker hosts |

@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 
 	v1 "github.com/bhangun/mandau/api/v1"
@@ -200,7 +199,7 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 	}
 
 	// Load CA certificate to verify server certificate
-	caCert, err := ioutil.ReadFile(caFile)
+	caCert, err := os.ReadFile(caFile)
 	if err != nil {
 		return fmt.Errorf("load CA cert: %w", err)
 	}

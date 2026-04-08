@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go *)",
+      "Bash(mv *)",
+      "Bash(rmdir *)",
+      "Bash(make *)",
+      "Bash(gofmt *)"
+    ]
+  },
+  "$version": 3
+}

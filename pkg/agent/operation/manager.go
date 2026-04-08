@@ -7,12 +7,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/bhangun/mandau/pkg/agent/queue"
 )
 
 type Manager struct {
 	mu         sync.RWMutex
 	operations map[string]*Operation
 	listeners  map[string][]chan Event
+	queue      *queue.Queue
+	connected  bool
+	connMu     sync.RWMutex
 }
 
 type Operation struct {
@@ -56,11 +60,89 @@ type Event struct {
 	Error       error
 }
 
-func NewManager() *Manager {
+func NewManager(q *queue.Queue) *Manager {
 	return &Manager{
 		operations: make(map[string]*Operation),
 		listeners:  make(map[string][]chan Event),
+		queue:      q,
+		connected:  true,
 	}
+}
+
+// SetConnectionState updates the connection state and processes queued operations
+func (m *Manager) SetConnectionState(connected bool) {
+	m.connMu.Lock()
+	defer m.connMu.Unlock()
+
+	wasConnected := m.connected
+	m.connected = connected
+
+	// If we just reconnected, process queued operations
+	if connected && !wasConnected && m.queue != nil {
+		go m.processQueuedOperations()
+	}
+}
+
+// IsConnected returns true if the agent is connected to core
+func (m *Manager) IsConnected() bool {
+	m.connMu.RLock()
+	defer m.connMu.RUnlock()
+	return m.connected
+}
+
+// processQueuedOperations processes operations from the queue when reconnected
+func (m *Manager) processQueuedOperations() {
+	if m.queue == nil {
+		return
+	}
+
+	// Process up to 10 operations at a time
+	for i := 0; i < 10; i++ {
+		op := m.queue.Dequeue()
+		if op == nil {
+			break
+		}
+
+		// Create a new internal operation to track the queued one
+		m.mu.Lock()
+		internalOp := &Operation{
+			ID:        op.ID,
+			Type:      OperationType(op.Type),
+			State:     OperationStateRunning,
+			CreatedAt: op.CreatedAt,
+			Metadata:  make(map[string]string),
+		}
+
+		// Restore metadata from payload
+		for k, v := range op.Payload {
+			if str, ok := v.(string); ok {
+				internalOp.Metadata[k] = str
+			}
+		}
+
+		m.operations[op.ID] = internalOp
+		m.mu.Unlock()
+
+		// Emit event that queued operation is now executing
+		m.emitEventLocked(Event{
+			OperationID: op.ID,
+			State:       OperationStateRunning,
+			Message:     "Executing queued operation after reconnection",
+			Timestamp:   time.Now(),
+		})
+
+		// The actual execution is handled by the caller
+		// Mark as executing in the queue
+		m.queue.MarkExecuting(op.ID)
+	}
+}
+
+// GetPendingQueueCount returns the number of operations waiting in the queue
+func (m *Manager) GetPendingQueueCount() int {
+	if m.queue == nil {
+		return 0
+	}
+	return m.queue.PendingCount()
 }
 
 // emitEventLocked sends an event to all listeners for the operation
@@ -195,16 +277,53 @@ func (m *Manager) SetError(opID string, err error) {
 		return
 	}
 
-	op.State = OperationStateFailed
-	op.Error = err
-	now := time.Now()
-	op.CompletedAt = &now
+	// If disconnected, queue the operation instead of failing
+	if !m.connected && m.queue != nil {
+		queueOp := &queue.Operation{
+			ID:        opID,
+			Type:      string(op.Type),
+			Payload:   make(map[string]interface{}),
+			CreatedAt: op.CreatedAt,
+			Attempts:  0,
+			MaxRetry:  3,
+			State:     queue.StatePending,
+		}
+
+		// Store metadata in payload
+		for k, v := range op.Metadata {
+			queueOp.Payload[k] = v
+		}
+
+		if queueErr := m.queue.Enqueue(queueOp); queueErr != nil {
+			// If queue fails, proceed with normal error handling
+			op.State = OperationStateFailed
+			op.Error = err
+			now := time.Now()
+			op.CompletedAt = &now
+		} else {
+			// Operation queued successfully
+			op.State = OperationStatePending
+			op.Error = fmt.Errorf("operation queued for retry: %w", err)
+			m.emitEventLocked(Event{
+				OperationID: opID,
+				State:       OperationStatePending,
+				Message:     "Operation queued for retry when connected",
+				Timestamp:   time.Now(),
+			})
+			return
+		}
+	} else {
+		op.State = OperationStateFailed
+		op.Error = err
+		now := time.Now()
+		op.CompletedAt = &now
+	}
 
 	m.emitEventLocked(Event{
 		OperationID: opID,
 		State:       OperationStateFailed,
 		Error:       err,
-		Timestamp:   now,
+		Timestamp:   time.Now(),
 	})
 }
 
