@@ -38,6 +38,17 @@ import (
 
 var version = "0.0.16" // Will be set by build process
 
+// expandTildePath expands ~ to the user's home directory
+func expandTildePath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(homeDir, path[2:])
+		}
+	}
+	return path
+}
+
 type Agent struct {
 	agentv1.UnimplementedAgentServiceServer
 	agentv1.UnimplementedStackServiceServer
@@ -177,13 +188,13 @@ func main() {
 		cfg.ListenAddr = agentConfig.Server.ListenAddr
 	}
 	if agentConfig.Server.TLS.CertPath != "" {
-		cfg.CertPath = agentConfig.Server.TLS.CertPath
+		cfg.CertPath = expandTildePath(agentConfig.Server.TLS.CertPath)
 	}
 	if agentConfig.Server.TLS.KeyPath != "" {
-		cfg.KeyPath = agentConfig.Server.TLS.KeyPath
+		cfg.KeyPath = expandTildePath(agentConfig.Server.TLS.KeyPath)
 	}
 	if agentConfig.Server.TLS.CAPath != "" {
-		cfg.CAPath = agentConfig.Server.TLS.CAPath
+		cfg.CAPath = expandTildePath(agentConfig.Server.TLS.CAPath)
 	}
 
 	// Use server connection config for core server address if available
@@ -193,7 +204,7 @@ func main() {
 	}
 
 	if agentConfig.Stacks.RootDir != "" {
-		cfg.StackRoot = agentConfig.Stacks.RootDir
+		cfg.StackRoot = expandTildePath(agentConfig.Stacks.RootDir)
 	}
 	if agentConfig.Agent.Labels != nil {
 		for k, v := range agentConfig.Agent.Labels {
@@ -267,6 +278,13 @@ func parseFlags(configArgs []string) *Config {
 
 	// Parse the filtered arguments
 	flagSet.Parse(configArgs)
+
+	// Expand tilde in paths
+	cfg.CertPath = expandTildePath(cfg.CertPath)
+	cfg.KeyPath = expandTildePath(cfg.KeyPath)
+	cfg.CAPath = expandTildePath(cfg.CAPath)
+	cfg.StackRoot = expandTildePath(cfg.StackRoot)
+	cfg.PluginDir = expandTildePath(cfg.PluginDir)
 
 	// Get hostname
 	hostname, err := os.Hostname()

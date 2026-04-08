@@ -5,7 +5,9 @@
       "Bash(mv *)",
       "Bash(rmdir *)",
       "Bash(make *)",
-      "Bash(gofmt *)"
+      "Bash(gofmt *)",
+      "Bash(git tag *)",
+      "Bash(ssh *)"
     ]
   },
   "$version": 3

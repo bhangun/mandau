@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/bhangun/mandau/pkg/config"
 	"github.com/bhangun/mandau/pkg/core"
@@ -92,16 +94,36 @@ func main() {
 		coreConfig.ListenAddr = *listenAddr
 	}
 	if *certPath != "" {
-		coreConfig.CertPath = *certPath
+		homeDir, _ := os.UserHomeDir()
+		if strings.HasPrefix(*certPath, "~/") {
+			coreConfig.CertPath = filepath.Join(homeDir, (*certPath)[2:])
+		} else {
+			coreConfig.CertPath = *certPath
+		}
 	}
 	if *keyPath != "" {
-		coreConfig.KeyPath = *keyPath
+		homeDir, _ := os.UserHomeDir()
+		if strings.HasPrefix(*keyPath, "~/") {
+			coreConfig.KeyPath = filepath.Join(homeDir, (*keyPath)[2:])
+		} else {
+			coreConfig.KeyPath = *keyPath
+		}
 	}
 	if *caPath != "" {
-		coreConfig.CAPath = *caPath
+		homeDir, _ := os.UserHomeDir()
+		if strings.HasPrefix(*caPath, "~/") {
+			coreConfig.CAPath = filepath.Join(homeDir, (*caPath)[2:])
+		} else {
+			coreConfig.CAPath = *caPath
+		}
 	}
 	if *pluginDir != "" {
-		coreConfig.PluginDir = *pluginDir
+		homeDir, _ := os.UserHomeDir()
+		if strings.HasPrefix(*pluginDir, "~/") {
+			coreConfig.PluginDir = filepath.Join(homeDir, (*pluginDir)[2:])
+		} else {
+			coreConfig.PluginDir = *pluginDir
+		}
 	}
 
 	// Validate required paths exist

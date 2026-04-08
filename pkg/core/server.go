@@ -30,6 +30,17 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// expandTilde expands ~ to the user's home directory
+func expandTilde(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(homeDir, path[2:])
+		}
+	}
+	return path
+}
+
 // Core is the central control plane that manages multiple agents
 type Core struct {
 	agentv1.UnimplementedCoreServiceServer
@@ -124,16 +135,16 @@ func NewCore(cfg *CoreConfig) (*Core, error) {
 		cfg.ListenAddr = fullConfig.Server.ListenAddr
 	}
 	if fullConfig.Server.TLS.CertPath != "" {
-		cfg.CertPath = fullConfig.Server.TLS.CertPath
+		cfg.CertPath = expandTilde(fullConfig.Server.TLS.CertPath)
 	}
 	if fullConfig.Server.TLS.KeyPath != "" {
-		cfg.KeyPath = fullConfig.Server.TLS.KeyPath
+		cfg.KeyPath = expandTilde(fullConfig.Server.TLS.KeyPath)
 	}
 	if fullConfig.Server.TLS.CAPath != "" {
-		cfg.CAPath = fullConfig.Server.TLS.CAPath
+		cfg.CAPath = expandTilde(fullConfig.Server.TLS.CAPath)
 	}
 	if fullConfig.PluginDir != "" {
-		cfg.PluginDir = fullConfig.PluginDir
+		cfg.PluginDir = expandTilde(fullConfig.PluginDir)
 	}
 
 	// Store the full configuration
