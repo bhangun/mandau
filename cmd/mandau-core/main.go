@@ -74,7 +74,7 @@ func main() {
 	if cfg == nil {
 		cfg, err = config.LoadCoreConfig(*configPath)
 		if err != nil {
-			log.Printf("Config file not found at %s, using defaults: %v", *configPath, err)
+			// Config file not found, use defaults (silent fallback)
 			cfg = config.CreateDefaultCoreConfig()
 		} else {
 			log.Printf("Loaded configuration from %s", *configPath)
