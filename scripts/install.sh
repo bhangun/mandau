@@ -76,14 +76,36 @@ detect_platform() {
 get_latest_version() {
     print_status "Fetching latest release version..."
 
-    # Use GitHub API to get the latest release
-    LATEST_VERSION=$(curl -s "https://api.github.com/repos/bhangun/mandau/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    # Allow override via environment variable
+    if [ -n "$MANDAU_VERSION" ]; then
+        LATEST_VERSION="$MANDAU_VERSION"
+        print_status "Using specified version: $LATEST_VERSION"
+        return 0
+    fi
+
+    # Try multiple approaches to get the latest release
+    # Method 1: GitHub API with redirect handling
+    LATEST_VERSION=$(curl -sL "https://api.github.com/repos/bhangun/mandau/releases/latest" \
+        -H "Accept: application/vnd.github.v3+json" \
+        2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+
+    # Method 2: Try following the redirect to releases page
+    if [ -z "$LATEST_VERSION" ]; then
+        LATEST_VERSION=$(curl -sL "https://github.com/bhangun/mandau/releases/latest" \
+            -o /dev/null -w '%{url_effective}' 2>/dev/null | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+')
+    fi
+
+    # Method 3: Try listing releases
+    if [ -z "$LATEST_VERSION" ]; then
+        LATEST_VERSION=$(curl -s "https://api.github.com/repos/bhangun/mandau/releases?per_page=1" \
+            2>/dev/null | grep '"tag_name":' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+    fi
 
     if [ -z "$LATEST_VERSION" ]; then
         print_error "Failed to fetch latest version from GitHub API"
-        # Fallback to a default version
-        LATEST_VERSION="v1.0.0"
-        print_warning "Using fallback version: $LATEST_VERSION"
+        print_warning "You can specify a version manually with: MANDAU_VERSION=v0.0.17 ./install.sh"
+        print_info "Available releases: https://github.com/bhangun/mandau/releases"
+        exit 1
     else
         print_status "Latest version: $LATEST_VERSION"
     fi

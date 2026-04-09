@@ -33,3 +33,7 @@ go.work.sum
 
 bin/
 certs/
+releases/
+mandau-linux-amd64-*.tar.gz
+mandau-darwin-amd64-*.tar.gz
+mandau-darwin-arm64-*.tar.gz
