@@ -578,11 +578,47 @@ download_and_install() {
     chown "$ORIGINAL_USER:$ORIGINAL_USER" "$ORIGINAL_HOME/mandau-stacks"
     chmod 755 "$ORIGINAL_HOME/mandau-stacks"
 
+    # Ensure proper ownership of all Mandau files
+    print_status "Setting file permissions..."
+    chown -R "$ORIGINAL_USER:$ORIGINAL_USER" "$ORIGINAL_HOME/.mandau/" 2>/dev/null || true
+
+    # Start and enable systemd services automatically
+    print_status "Starting Mandau services..."
+    if command -v systemctl >/dev/null 2>&1; then
+        # Enable services to start on boot
+        $SUDO systemctl enable mandau-core 2>/dev/null || true
+        $SUDO systemctl enable mandau-agent 2>/dev/null || true
+
+        # Start core service
+        if $SUDO systemctl start mandau-core 2>/dev/null; then
+            print_success "Mandau Core service started"
+        else
+            print_warning "Core service failed to start, check logs with: journalctl -u mandau-core"
+        fi
+
+        # Start agent service
+        if $SUDO systemctl start mandau-agent 2>/dev/null; then
+            print_success "Mandau Agent service started"
+        else
+            print_warning "Agent service failed to start, check logs with: journalctl -u mandau-agent"
+        fi
+
+        # Wait a moment and check service status
+        sleep 2
+        core_status=$($SUDO systemctl is-active mandau-core 2>/dev/null || echo "unknown")
+        if [ "$core_status" = "active" ]; then
+            print_success "✓ Mandau Core is running and healthy!"
+        else
+            print_warning "⚠ Mandau Core may have issues. Check logs:"
+            print_status "  sudo journalctl -u mandau-core --no-pager -n 20"
+        fi
+    fi
+
     print_success "Mandau installation completed successfully!"
     print_status "Certificates are in ~/.mandau/certs/ (standard location)"
     print_status "Configuration is in ~/.mandau/ with profile support"
     print_status "Stacks directory created at ~/mandau-stacks/"
-    print_status "Systemd services created with absolute paths"
+    print_status "Systemd services created and enabled with absolute paths"
     print_status "Default core port: ${MANDAU_CORE_PORT:-9443}"
 
     # Return to original directory and cleanup
