@@ -29,11 +29,8 @@ jobs:
           sudo apt-get install -y protobuf-compiler zip
           go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-          export PATH="$PATH:$(go env GOPATH)/bin"
-          echo "GOPATH bin: $(go env GOPATH)/bin"
+          # Add GOPATH bin to PATH for all subsequent steps
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
-      # Proto files are already generated and committed, skipping regeneration
 
       - name: Get tag
         id: tag
