@@ -243,7 +243,7 @@ Type=simple
 User=$original_user
 Group=$original_user
 Environment="MANDAU_ADMIN_USER=${MANDAU_ADMIN_USER:-admin}"
-ExecStart=/usr/local/bin/mandau-core --listen :${core_port} --cert $original_home/.mandau/certs/core.crt --key $original_home/.mandau/certs/core.key --ca $original_home/.mandau/certs/ca.crt
+ExecStart=/usr/local/bin/mandau-core -listen :${core_port} -cert $original_home/.mandau/certs/core.crt -key $original_home/.mandau/certs/core.key -ca $original_home/.mandau/certs/ca.crt
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -253,8 +253,8 @@ StandardError=journal
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=$original_home/mandau-certs $original_home/mandau-stacks /tmp
+ProtectHome=read-only
+ReadWritePaths=$original_home/.mandau $original_home/mandau-stacks /tmp
 
 [Install]
 WantedBy=multi-user.target
@@ -271,7 +271,7 @@ Wants=mandau-core.service
 Type=simple
 User=$original_user
 Group=$original_user
-ExecStart=/usr/local/bin/mandau-agent --server localhost:${core_port} --cert $original_home/.mandau/certs/agent.crt --key $original_home/.mandau/certs/agent.key --ca $original_home/.mandau/certs/ca.crt --stack-root $original_home/mandau-stacks
+ExecStart=/usr/local/bin/mandau-agent -server localhost:${core_port} -cert $original_home/.mandau/certs/agent.crt -key $original_home/.mandau/certs/agent.key -ca $original_home/.mandau/certs/ca.crt -stack-root $original_home/mandau-stacks
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -281,8 +281,8 @@ StandardError=journal
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=$original_home/mandau-certs $original_home/mandau-stacks /var/run/docker.sock /tmp
+ProtectHome=read-only
+ReadWritePaths=$original_home/.mandau $original_home/mandau-stacks /var/run/docker.sock /tmp
 
 [Install]
 WantedBy=multi-user.target
