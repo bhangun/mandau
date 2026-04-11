@@ -2608,6 +2608,7 @@ func (x *GetStackLogsRequest) GetFollow() bool {
 
 type ListContainersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2640,6 +2641,13 @@ func (x *ListContainersRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListContainersRequest.ProtoReflect.Descriptor instead.
 func (*ListContainersRequest) Descriptor() ([]byte, []int) {
 	return file_api_v1_agent_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *ListContainersRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
 }
 
 type ListContainersResponse struct {
@@ -3102,6 +3110,118 @@ func (*RestartContainerResponse) Descriptor() ([]byte, []int) {
 	return file_api_v1_agent_proto_rawDescGZIP(), []int{49}
 }
 
+type DockerCommandRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Args          []string               `protobuf:"bytes,2,rep,name=args,proto3" json:"args,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DockerCommandRequest) Reset() {
+	*x = DockerCommandRequest{}
+	mi := &file_api_v1_agent_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DockerCommandRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DockerCommandRequest) ProtoMessage() {}
+
+func (x *DockerCommandRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_agent_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DockerCommandRequest.ProtoReflect.Descriptor instead.
+func (*DockerCommandRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *DockerCommandRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *DockerCommandRequest) GetArgs() []string {
+	if x != nil {
+		return x.Args
+	}
+	return nil
+}
+
+type DockerCommandResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Output        []byte                 `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	ExitCode      int32                  `protobuf:"varint,2,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DockerCommandResponse) Reset() {
+	*x = DockerCommandResponse{}
+	mi := &file_api_v1_agent_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DockerCommandResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DockerCommandResponse) ProtoMessage() {}
+
+func (x *DockerCommandResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_agent_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DockerCommandResponse.ProtoReflect.Descriptor instead.
+func (*DockerCommandResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *DockerCommandResponse) GetOutput() []byte {
+	if x != nil {
+		return x.Output
+	}
+	return nil
+}
+
+func (x *DockerCommandResponse) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+func (x *DockerCommandResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 type WriteFileResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -3110,7 +3230,7 @@ type WriteFileResponse struct {
 
 func (x *WriteFileResponse) Reset() {
 	*x = WriteFileResponse{}
-	mi := &file_api_v1_agent_proto_msgTypes[50]
+	mi := &file_api_v1_agent_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3122,7 +3242,7 @@ func (x *WriteFileResponse) String() string {
 func (*WriteFileResponse) ProtoMessage() {}
 
 func (x *WriteFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[50]
+	mi := &file_api_v1_agent_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3135,7 +3255,7 @@ func (x *WriteFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteFileResponse.ProtoReflect.Descriptor instead.
 func (*WriteFileResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{50}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{52}
 }
 
 type DeleteFileRequest struct {
@@ -3147,7 +3267,7 @@ type DeleteFileRequest struct {
 
 func (x *DeleteFileRequest) Reset() {
 	*x = DeleteFileRequest{}
-	mi := &file_api_v1_agent_proto_msgTypes[51]
+	mi := &file_api_v1_agent_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3159,7 +3279,7 @@ func (x *DeleteFileRequest) String() string {
 func (*DeleteFileRequest) ProtoMessage() {}
 
 func (x *DeleteFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[51]
+	mi := &file_api_v1_agent_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3172,7 +3292,7 @@ func (x *DeleteFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFileRequest.ProtoReflect.Descriptor instead.
 func (*DeleteFileRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{51}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *DeleteFileRequest) GetPath() string {
@@ -3190,7 +3310,7 @@ type DeleteFileResponse struct {
 
 func (x *DeleteFileResponse) Reset() {
 	*x = DeleteFileResponse{}
-	mi := &file_api_v1_agent_proto_msgTypes[52]
+	mi := &file_api_v1_agent_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3202,7 +3322,7 @@ func (x *DeleteFileResponse) String() string {
 func (*DeleteFileResponse) ProtoMessage() {}
 
 func (x *DeleteFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[52]
+	mi := &file_api_v1_agent_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3215,7 +3335,7 @@ func (x *DeleteFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFileResponse.ProtoReflect.Descriptor instead.
 func (*DeleteFileResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{52}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{54}
 }
 
 type CreateDirectoryRequest struct {
@@ -3227,7 +3347,7 @@ type CreateDirectoryRequest struct {
 
 func (x *CreateDirectoryRequest) Reset() {
 	*x = CreateDirectoryRequest{}
-	mi := &file_api_v1_agent_proto_msgTypes[53]
+	mi := &file_api_v1_agent_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3239,7 +3359,7 @@ func (x *CreateDirectoryRequest) String() string {
 func (*CreateDirectoryRequest) ProtoMessage() {}
 
 func (x *CreateDirectoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[53]
+	mi := &file_api_v1_agent_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3252,7 +3372,7 @@ func (x *CreateDirectoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDirectoryRequest.ProtoReflect.Descriptor instead.
 func (*CreateDirectoryRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{53}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *CreateDirectoryRequest) GetPath() string {
@@ -3270,7 +3390,7 @@ type CreateDirectoryResponse struct {
 
 func (x *CreateDirectoryResponse) Reset() {
 	*x = CreateDirectoryResponse{}
-	mi := &file_api_v1_agent_proto_msgTypes[54]
+	mi := &file_api_v1_agent_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3282,7 +3402,7 @@ func (x *CreateDirectoryResponse) String() string {
 func (*CreateDirectoryResponse) ProtoMessage() {}
 
 func (x *CreateDirectoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[54]
+	mi := &file_api_v1_agent_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3295,7 +3415,7 @@ func (x *CreateDirectoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDirectoryResponse.ProtoReflect.Descriptor instead.
 func (*CreateDirectoryResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{54}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{56}
 }
 
 type GetOperationRequest struct {
@@ -3307,7 +3427,7 @@ type GetOperationRequest struct {
 
 func (x *GetOperationRequest) Reset() {
 	*x = GetOperationRequest{}
-	mi := &file_api_v1_agent_proto_msgTypes[55]
+	mi := &file_api_v1_agent_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3319,7 +3439,7 @@ func (x *GetOperationRequest) String() string {
 func (*GetOperationRequest) ProtoMessage() {}
 
 func (x *GetOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[55]
+	mi := &file_api_v1_agent_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3332,7 +3452,7 @@ func (x *GetOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOperationRequest.ProtoReflect.Descriptor instead.
 func (*GetOperationRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{55}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *GetOperationRequest) GetOperationId() string {
@@ -3350,7 +3470,7 @@ type ListOperationsRequest struct {
 
 func (x *ListOperationsRequest) Reset() {
 	*x = ListOperationsRequest{}
-	mi := &file_api_v1_agent_proto_msgTypes[56]
+	mi := &file_api_v1_agent_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3362,7 +3482,7 @@ func (x *ListOperationsRequest) String() string {
 func (*ListOperationsRequest) ProtoMessage() {}
 
 func (x *ListOperationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[56]
+	mi := &file_api_v1_agent_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3375,7 +3495,7 @@ func (x *ListOperationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOperationsRequest.ProtoReflect.Descriptor instead.
 func (*ListOperationsRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{56}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{58}
 }
 
 type ListOperationsResponse struct {
@@ -3386,7 +3506,7 @@ type ListOperationsResponse struct {
 
 func (x *ListOperationsResponse) Reset() {
 	*x = ListOperationsResponse{}
-	mi := &file_api_v1_agent_proto_msgTypes[57]
+	mi := &file_api_v1_agent_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3398,7 +3518,7 @@ func (x *ListOperationsResponse) String() string {
 func (*ListOperationsResponse) ProtoMessage() {}
 
 func (x *ListOperationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[57]
+	mi := &file_api_v1_agent_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3411,7 +3531,7 @@ func (x *ListOperationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOperationsResponse.ProtoReflect.Descriptor instead.
 func (*ListOperationsResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{57}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{59}
 }
 
 type CancelOperationRequest struct {
@@ -3423,7 +3543,7 @@ type CancelOperationRequest struct {
 
 func (x *CancelOperationRequest) Reset() {
 	*x = CancelOperationRequest{}
-	mi := &file_api_v1_agent_proto_msgTypes[58]
+	mi := &file_api_v1_agent_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3435,7 +3555,7 @@ func (x *CancelOperationRequest) String() string {
 func (*CancelOperationRequest) ProtoMessage() {}
 
 func (x *CancelOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[58]
+	mi := &file_api_v1_agent_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3448,7 +3568,7 @@ func (x *CancelOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelOperationRequest.ProtoReflect.Descriptor instead.
 func (*CancelOperationRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{58}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *CancelOperationRequest) GetOperationId() string {
@@ -3466,7 +3586,7 @@ type CancelOperationResponse struct {
 
 func (x *CancelOperationResponse) Reset() {
 	*x = CancelOperationResponse{}
-	mi := &file_api_v1_agent_proto_msgTypes[59]
+	mi := &file_api_v1_agent_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3478,7 +3598,7 @@ func (x *CancelOperationResponse) String() string {
 func (*CancelOperationResponse) ProtoMessage() {}
 
 func (x *CancelOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[59]
+	mi := &file_api_v1_agent_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3491,7 +3611,7 @@ func (x *CancelOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelOperationResponse.ProtoReflect.Descriptor instead.
 func (*CancelOperationResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{59}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{61}
 }
 
 type StreamOperationRequest struct {
@@ -3503,7 +3623,7 @@ type StreamOperationRequest struct {
 
 func (x *StreamOperationRequest) Reset() {
 	*x = StreamOperationRequest{}
-	mi := &file_api_v1_agent_proto_msgTypes[60]
+	mi := &file_api_v1_agent_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3515,7 +3635,7 @@ func (x *StreamOperationRequest) String() string {
 func (*StreamOperationRequest) ProtoMessage() {}
 
 func (x *StreamOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[60]
+	mi := &file_api_v1_agent_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3528,7 +3648,7 @@ func (x *StreamOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamOperationRequest.ProtoReflect.Descriptor instead.
 func (*StreamOperationRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{60}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *StreamOperationRequest) GetOperationId() string {
@@ -3546,7 +3666,7 @@ type CPUStats struct {
 
 func (x *CPUStats) Reset() {
 	*x = CPUStats{}
-	mi := &file_api_v1_agent_proto_msgTypes[61]
+	mi := &file_api_v1_agent_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3558,7 +3678,7 @@ func (x *CPUStats) String() string {
 func (*CPUStats) ProtoMessage() {}
 
 func (x *CPUStats) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[61]
+	mi := &file_api_v1_agent_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3571,7 +3691,7 @@ func (x *CPUStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CPUStats.ProtoReflect.Descriptor instead.
 func (*CPUStats) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{61}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{63}
 }
 
 type MemoryStats struct {
@@ -3582,7 +3702,7 @@ type MemoryStats struct {
 
 func (x *MemoryStats) Reset() {
 	*x = MemoryStats{}
-	mi := &file_api_v1_agent_proto_msgTypes[62]
+	mi := &file_api_v1_agent_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3594,7 +3714,7 @@ func (x *MemoryStats) String() string {
 func (*MemoryStats) ProtoMessage() {}
 
 func (x *MemoryStats) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[62]
+	mi := &file_api_v1_agent_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3607,7 +3727,7 @@ func (x *MemoryStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemoryStats.ProtoReflect.Descriptor instead.
 func (*MemoryStats) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{62}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{64}
 }
 
 type NetworkStats struct {
@@ -3618,7 +3738,7 @@ type NetworkStats struct {
 
 func (x *NetworkStats) Reset() {
 	*x = NetworkStats{}
-	mi := &file_api_v1_agent_proto_msgTypes[63]
+	mi := &file_api_v1_agent_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3630,7 +3750,7 @@ func (x *NetworkStats) String() string {
 func (*NetworkStats) ProtoMessage() {}
 
 func (x *NetworkStats) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[63]
+	mi := &file_api_v1_agent_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3643,7 +3763,7 @@ func (x *NetworkStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkStats.ProtoReflect.Descriptor instead.
 func (*NetworkStats) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{63}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{65}
 }
 
 type BlockIOStats struct {
@@ -3654,7 +3774,7 @@ type BlockIOStats struct {
 
 func (x *BlockIOStats) Reset() {
 	*x = BlockIOStats{}
-	mi := &file_api_v1_agent_proto_msgTypes[64]
+	mi := &file_api_v1_agent_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3666,7 +3786,7 @@ func (x *BlockIOStats) String() string {
 func (*BlockIOStats) ProtoMessage() {}
 
 func (x *BlockIOStats) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_agent_proto_msgTypes[64]
+	mi := &file_api_v1_agent_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3679,7 +3799,7 @@ func (x *BlockIOStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BlockIOStats.ProtoReflect.Descriptor instead.
 func (*BlockIOStats) Descriptor() ([]byte, []int) {
-	return file_api_v1_agent_proto_rawDescGZIP(), []int{64}
+	return file_api_v1_agent_proto_rawDescGZIP(), []int{66}
 }
 
 var File_api_v1_agent_proto protoreflect.FileDescriptor
@@ -3890,8 +4010,9 @@ const file_api_v1_agent_proto_rawDesc = "" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1d\n" +
 	"\n" +
 	"stack_name\x18\x02 \x01(\tR\tstackName\x12\x16\n" +
-	"\x06follow\x18\x03 \x01(\bR\x06follow\"\x17\n" +
-	"\x15ListContainersRequest\"T\n" +
+	"\x06follow\x18\x03 \x01(\bR\x06follow\"2\n" +
+	"\x15ListContainersRequest\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\"T\n" +
 	"\x16ListContainersResponse\x12:\n" +
 	"\n" +
 	"containers\x18\x01 \x03(\v2\x1a.mandau.agent.v1.ContainerR\n" +
@@ -3912,7 +4033,14 @@ const file_api_v1_agent_proto_rawDesc = "" +
 	"\x15StopContainerResponse\"<\n" +
 	"\x17RestartContainerRequest\x12!\n" +
 	"\fcontainer_id\x18\x01 \x01(\tR\vcontainerId\"\x1a\n" +
-	"\x18RestartContainerResponse\"\x13\n" +
+	"\x18RestartContainerResponse\"E\n" +
+	"\x14DockerCommandRequest\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
+	"\x04args\x18\x02 \x03(\tR\x04args\"b\n" +
+	"\x15DockerCommandResponse\x12\x16\n" +
+	"\x06output\x18\x01 \x01(\fR\x06output\x12\x1b\n" +
+	"\texit_code\x18\x02 \x01(\x05R\bexitCode\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\x13\n" +
 	"\x11WriteFileResponse\"'\n" +
 	"\x11DeleteFileRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\"\x14\n" +
@@ -3952,12 +4080,14 @@ const file_api_v1_agent_proto_rawDesc = "" +
 	"\x17OPERATION_STATE_RUNNING\x10\x01\x12\x1d\n" +
 	"\x19OPERATION_STATE_COMPLETED\x10\x02\x12\x1a\n" +
 	"\x16OPERATION_STATE_FAILED\x10\x03\x12\x1d\n" +
-	"\x19OPERATION_STATE_CANCELLED\x10\x042\x8e\x02\n" +
+	"\x19OPERATION_STATE_CANCELLED\x10\x042\xda\x03\n" +
 	"\vCoreService\x12U\n" +
 	"\n" +
 	"ListAgents\x12\".mandau.agent.v1.ListAgentsRequest\x1a#.mandau.agent.v1.ListAgentsResponse\x12T\n" +
 	"\rRegisterAgent\x12 .mandau.agent.v1.RegisterRequest\x1a!.mandau.agent.v1.RegisterResponse\x12R\n" +
-	"\tHeartbeat\x12!.mandau.agent.v1.HeartbeatRequest\x1a\".mandau.agent.v1.HeartbeatResponse2\xe1\x02\n" +
+	"\tHeartbeat\x12!.mandau.agent.v1.HeartbeatRequest\x1a\".mandau.agent.v1.HeartbeatResponse\x12a\n" +
+	"\x0eListContainers\x12&.mandau.agent.v1.ListContainersRequest\x1a'.mandau.agent.v1.ListContainersResponse\x12g\n" +
+	"\x14ExecuteDockerCommand\x12%.mandau.agent.v1.DockerCommandRequest\x1a&.mandau.agent.v1.DockerCommandResponse0\x012\xe1\x02\n" +
 	"\fAgentService\x12O\n" +
 	"\bRegister\x12 .mandau.agent.v1.RegisterRequest\x1a!.mandau.agent.v1.RegisterResponse\x12R\n" +
 	"\tHeartbeat\x12!.mandau.agent.v1.HeartbeatRequest\x1a\".mandau.agent.v1.HeartbeatResponse\x12^\n" +
@@ -3971,7 +4101,7 @@ const file_api_v1_agent_proto_rawDesc = "" +
 	"ApplyStack\x12\".mandau.agent.v1.ApplyStackRequest\x1a\x1f.mandau.agent.v1.OperationEvent0\x01\x12U\n" +
 	"\vRemoveStack\x12#.mandau.agent.v1.RemoveStackRequest\x1a\x1f.mandau.agent.v1.OperationEvent0\x01\x12R\n" +
 	"\tDiffStack\x12!.mandau.agent.v1.DiffStackRequest\x1a\".mandau.agent.v1.DiffStackResponse\x12Q\n" +
-	"\fGetStackLogs\x12$.mandau.agent.v1.GetStackLogsRequest\x1a\x19.mandau.agent.v1.LogEntry0\x012\xf3\x05\n" +
+	"\fGetStackLogs\x12$.mandau.agent.v1.GetStackLogsRequest\x1a\x19.mandau.agent.v1.LogEntry0\x012\xdc\x06\n" +
 	"\x10ContainerService\x12a\n" +
 	"\x0eListContainers\x12&.mandau.agent.v1.ListContainersRequest\x1a'.mandau.agent.v1.ListContainersResponse\x12g\n" +
 	"\x10InspectContainer\x12(.mandau.agent.v1.InspectContainerRequest\x1a).mandau.agent.v1.InspectContainerResponse\x12M\n" +
@@ -3981,7 +4111,8 @@ const file_api_v1_agent_proto_rawDesc = "" +
 	"\bGetStats\x12 .mandau.agent.v1.GetStatsRequest\x1a\x1f.mandau.agent.v1.ContainerStats0\x01\x12a\n" +
 	"\x0eStartContainer\x12&.mandau.agent.v1.StartContainerRequest\x1a'.mandau.agent.v1.StartContainerResponse\x12^\n" +
 	"\rStopContainer\x12%.mandau.agent.v1.StopContainerRequest\x1a&.mandau.agent.v1.StopContainerResponse\x12g\n" +
-	"\x10RestartContainer\x12(.mandau.agent.v1.RestartContainerRequest\x1a).mandau.agent.v1.RestartContainerResponse2\xc9\x03\n" +
+	"\x10RestartContainer\x12(.mandau.agent.v1.RestartContainerRequest\x1a).mandau.agent.v1.RestartContainerResponse\x12g\n" +
+	"\x14ExecuteDockerCommand\x12%.mandau.agent.v1.DockerCommandRequest\x1a&.mandau.agent.v1.DockerCommandResponse0\x012\xc9\x03\n" +
 	"\x11FilesystemService\x12R\n" +
 	"\tListFiles\x12!.mandau.agent.v1.ListFilesRequest\x1a\".mandau.agent.v1.ListFilesResponse\x12O\n" +
 	"\bReadFile\x12 .mandau.agent.v1.ReadFileRequest\x1a!.mandau.agent.v1.ReadFileResponse\x12R\n" +
@@ -4008,7 +4139,7 @@ func file_api_v1_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_api_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 74)
+var file_api_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 76)
 var file_api_v1_agent_proto_goTypes = []any{
 	(StackState)(0),                  // 0: mandau.agent.v1.StackState
 	(DiffAction)(0),                  // 1: mandau.agent.v1.DiffAction
@@ -4063,71 +4194,73 @@ var file_api_v1_agent_proto_goTypes = []any{
 	(*StopContainerResponse)(nil),    // 50: mandau.agent.v1.StopContainerResponse
 	(*RestartContainerRequest)(nil),  // 51: mandau.agent.v1.RestartContainerRequest
 	(*RestartContainerResponse)(nil), // 52: mandau.agent.v1.RestartContainerResponse
-	(*WriteFileResponse)(nil),        // 53: mandau.agent.v1.WriteFileResponse
-	(*DeleteFileRequest)(nil),        // 54: mandau.agent.v1.DeleteFileRequest
-	(*DeleteFileResponse)(nil),       // 55: mandau.agent.v1.DeleteFileResponse
-	(*CreateDirectoryRequest)(nil),   // 56: mandau.agent.v1.CreateDirectoryRequest
-	(*CreateDirectoryResponse)(nil),  // 57: mandau.agent.v1.CreateDirectoryResponse
-	(*GetOperationRequest)(nil),      // 58: mandau.agent.v1.GetOperationRequest
-	(*ListOperationsRequest)(nil),    // 59: mandau.agent.v1.ListOperationsRequest
-	(*ListOperationsResponse)(nil),   // 60: mandau.agent.v1.ListOperationsResponse
-	(*CancelOperationRequest)(nil),   // 61: mandau.agent.v1.CancelOperationRequest
-	(*CancelOperationResponse)(nil),  // 62: mandau.agent.v1.CancelOperationResponse
-	(*StreamOperationRequest)(nil),   // 63: mandau.agent.v1.StreamOperationRequest
-	(*CPUStats)(nil),                 // 64: mandau.agent.v1.CPUStats
-	(*MemoryStats)(nil),              // 65: mandau.agent.v1.MemoryStats
-	(*NetworkStats)(nil),             // 66: mandau.agent.v1.NetworkStats
-	(*BlockIOStats)(nil),             // 67: mandau.agent.v1.BlockIOStats
-	nil,                              // 68: mandau.agent.v1.Agent.LabelsEntry
-	nil,                              // 69: mandau.agent.v1.RegisterRequest.LabelsEntry
-	nil,                              // 70: mandau.agent.v1.Stack.LabelsEntry
-	nil,                              // 71: mandau.agent.v1.ApplyStackRequest.EnvVarsEntry
-	nil,                              // 72: mandau.agent.v1.Container.LabelsEntry
-	nil,                              // 73: mandau.agent.v1.ExecStart.EnvEntry
-	nil,                              // 74: mandau.agent.v1.Operation.MetadataEntry
-	nil,                              // 75: mandau.agent.v1.HeartbeatRequest.StatusEntry
-	nil,                              // 76: mandau.agent.v1.HealthResponse.StatusEntry
-	(*timestamppb.Timestamp)(nil),    // 77: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),      // 78: google.protobuf.Duration
+	(*DockerCommandRequest)(nil),     // 53: mandau.agent.v1.DockerCommandRequest
+	(*DockerCommandResponse)(nil),    // 54: mandau.agent.v1.DockerCommandResponse
+	(*WriteFileResponse)(nil),        // 55: mandau.agent.v1.WriteFileResponse
+	(*DeleteFileRequest)(nil),        // 56: mandau.agent.v1.DeleteFileRequest
+	(*DeleteFileResponse)(nil),       // 57: mandau.agent.v1.DeleteFileResponse
+	(*CreateDirectoryRequest)(nil),   // 58: mandau.agent.v1.CreateDirectoryRequest
+	(*CreateDirectoryResponse)(nil),  // 59: mandau.agent.v1.CreateDirectoryResponse
+	(*GetOperationRequest)(nil),      // 60: mandau.agent.v1.GetOperationRequest
+	(*ListOperationsRequest)(nil),    // 61: mandau.agent.v1.ListOperationsRequest
+	(*ListOperationsResponse)(nil),   // 62: mandau.agent.v1.ListOperationsResponse
+	(*CancelOperationRequest)(nil),   // 63: mandau.agent.v1.CancelOperationRequest
+	(*CancelOperationResponse)(nil),  // 64: mandau.agent.v1.CancelOperationResponse
+	(*StreamOperationRequest)(nil),   // 65: mandau.agent.v1.StreamOperationRequest
+	(*CPUStats)(nil),                 // 66: mandau.agent.v1.CPUStats
+	(*MemoryStats)(nil),              // 67: mandau.agent.v1.MemoryStats
+	(*NetworkStats)(nil),             // 68: mandau.agent.v1.NetworkStats
+	(*BlockIOStats)(nil),             // 69: mandau.agent.v1.BlockIOStats
+	nil,                              // 70: mandau.agent.v1.Agent.LabelsEntry
+	nil,                              // 71: mandau.agent.v1.RegisterRequest.LabelsEntry
+	nil,                              // 72: mandau.agent.v1.Stack.LabelsEntry
+	nil,                              // 73: mandau.agent.v1.ApplyStackRequest.EnvVarsEntry
+	nil,                              // 74: mandau.agent.v1.Container.LabelsEntry
+	nil,                              // 75: mandau.agent.v1.ExecStart.EnvEntry
+	nil,                              // 76: mandau.agent.v1.Operation.MetadataEntry
+	nil,                              // 77: mandau.agent.v1.HeartbeatRequest.StatusEntry
+	nil,                              // 78: mandau.agent.v1.HealthResponse.StatusEntry
+	(*timestamppb.Timestamp)(nil),    // 79: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),      // 80: google.protobuf.Duration
 }
 var file_api_v1_agent_proto_depIdxs = []int32{
 	5,  // 0: mandau.agent.v1.ListAgentsResponse.agents:type_name -> mandau.agent.v1.Agent
-	68, // 1: mandau.agent.v1.Agent.labels:type_name -> mandau.agent.v1.Agent.LabelsEntry
-	77, // 2: mandau.agent.v1.Agent.last_seen:type_name -> google.protobuf.Timestamp
-	69, // 3: mandau.agent.v1.RegisterRequest.labels:type_name -> mandau.agent.v1.RegisterRequest.LabelsEntry
-	78, // 4: mandau.agent.v1.RegisterResponse.heartbeat_interval:type_name -> google.protobuf.Duration
+	70, // 1: mandau.agent.v1.Agent.labels:type_name -> mandau.agent.v1.Agent.LabelsEntry
+	79, // 2: mandau.agent.v1.Agent.last_seen:type_name -> google.protobuf.Timestamp
+	71, // 3: mandau.agent.v1.RegisterRequest.labels:type_name -> mandau.agent.v1.RegisterRequest.LabelsEntry
+	80, // 4: mandau.agent.v1.RegisterResponse.heartbeat_interval:type_name -> google.protobuf.Duration
 	0,  // 5: mandau.agent.v1.Stack.state:type_name -> mandau.agent.v1.StackState
 	13, // 6: mandau.agent.v1.Stack.containers:type_name -> mandau.agent.v1.Container
-	77, // 7: mandau.agent.v1.Stack.created_at:type_name -> google.protobuf.Timestamp
-	77, // 8: mandau.agent.v1.Stack.updated_at:type_name -> google.protobuf.Timestamp
-	70, // 9: mandau.agent.v1.Stack.labels:type_name -> mandau.agent.v1.Stack.LabelsEntry
-	71, // 10: mandau.agent.v1.ApplyStackRequest.env_vars:type_name -> mandau.agent.v1.ApplyStackRequest.EnvVarsEntry
+	79, // 7: mandau.agent.v1.Stack.created_at:type_name -> google.protobuf.Timestamp
+	79, // 8: mandau.agent.v1.Stack.updated_at:type_name -> google.protobuf.Timestamp
+	72, // 9: mandau.agent.v1.Stack.labels:type_name -> mandau.agent.v1.Stack.LabelsEntry
+	73, // 10: mandau.agent.v1.ApplyStackRequest.env_vars:type_name -> mandau.agent.v1.ApplyStackRequest.EnvVarsEntry
 	12, // 11: mandau.agent.v1.DiffStackResponse.services:type_name -> mandau.agent.v1.ServiceDiff
 	1,  // 12: mandau.agent.v1.ServiceDiff.action:type_name -> mandau.agent.v1.DiffAction
-	77, // 13: mandau.agent.v1.Container.created:type_name -> google.protobuf.Timestamp
-	72, // 14: mandau.agent.v1.Container.labels:type_name -> mandau.agent.v1.Container.LabelsEntry
+	79, // 13: mandau.agent.v1.Container.created:type_name -> google.protobuf.Timestamp
+	74, // 14: mandau.agent.v1.Container.labels:type_name -> mandau.agent.v1.Container.LabelsEntry
 	14, // 15: mandau.agent.v1.Container.ports:type_name -> mandau.agent.v1.Port
 	16, // 16: mandau.agent.v1.ExecRequest.start:type_name -> mandau.agent.v1.ExecStart
 	17, // 17: mandau.agent.v1.ExecRequest.resize:type_name -> mandau.agent.v1.ExecResize
-	73, // 18: mandau.agent.v1.ExecStart.env:type_name -> mandau.agent.v1.ExecStart.EnvEntry
-	77, // 19: mandau.agent.v1.LogEntry.timestamp:type_name -> google.protobuf.Timestamp
-	77, // 20: mandau.agent.v1.ContainerStats.timestamp:type_name -> google.protobuf.Timestamp
-	64, // 21: mandau.agent.v1.ContainerStats.cpu:type_name -> mandau.agent.v1.CPUStats
-	65, // 22: mandau.agent.v1.ContainerStats.memory:type_name -> mandau.agent.v1.MemoryStats
-	66, // 23: mandau.agent.v1.ContainerStats.network:type_name -> mandau.agent.v1.NetworkStats
-	67, // 24: mandau.agent.v1.ContainerStats.block_io:type_name -> mandau.agent.v1.BlockIOStats
+	75, // 18: mandau.agent.v1.ExecStart.env:type_name -> mandau.agent.v1.ExecStart.EnvEntry
+	79, // 19: mandau.agent.v1.LogEntry.timestamp:type_name -> google.protobuf.Timestamp
+	79, // 20: mandau.agent.v1.ContainerStats.timestamp:type_name -> google.protobuf.Timestamp
+	66, // 21: mandau.agent.v1.ContainerStats.cpu:type_name -> mandau.agent.v1.CPUStats
+	67, // 22: mandau.agent.v1.ContainerStats.memory:type_name -> mandau.agent.v1.MemoryStats
+	68, // 23: mandau.agent.v1.ContainerStats.network:type_name -> mandau.agent.v1.NetworkStats
+	69, // 24: mandau.agent.v1.ContainerStats.block_io:type_name -> mandau.agent.v1.BlockIOStats
 	23, // 25: mandau.agent.v1.ListFilesResponse.files:type_name -> mandau.agent.v1.FileInfo
-	77, // 26: mandau.agent.v1.FileInfo.modified:type_name -> google.protobuf.Timestamp
+	79, // 26: mandau.agent.v1.FileInfo.modified:type_name -> google.protobuf.Timestamp
 	23, // 27: mandau.agent.v1.ReadFileResponse.info:type_name -> mandau.agent.v1.FileInfo
 	2,  // 28: mandau.agent.v1.Operation.state:type_name -> mandau.agent.v1.OperationState
-	77, // 29: mandau.agent.v1.Operation.created_at:type_name -> google.protobuf.Timestamp
-	77, // 30: mandau.agent.v1.Operation.completed_at:type_name -> google.protobuf.Timestamp
-	74, // 31: mandau.agent.v1.Operation.metadata:type_name -> mandau.agent.v1.Operation.MetadataEntry
+	79, // 29: mandau.agent.v1.Operation.created_at:type_name -> google.protobuf.Timestamp
+	79, // 30: mandau.agent.v1.Operation.completed_at:type_name -> google.protobuf.Timestamp
+	76, // 31: mandau.agent.v1.Operation.metadata:type_name -> mandau.agent.v1.Operation.MetadataEntry
 	2,  // 32: mandau.agent.v1.OperationEvent.state:type_name -> mandau.agent.v1.OperationState
-	77, // 33: mandau.agent.v1.OperationEvent.timestamp:type_name -> google.protobuf.Timestamp
-	75, // 34: mandau.agent.v1.HeartbeatRequest.status:type_name -> mandau.agent.v1.HeartbeatRequest.StatusEntry
-	78, // 35: mandau.agent.v1.HeartbeatResponse.next_heartbeat:type_name -> google.protobuf.Duration
-	76, // 36: mandau.agent.v1.HealthResponse.status:type_name -> mandau.agent.v1.HealthResponse.StatusEntry
+	79, // 33: mandau.agent.v1.OperationEvent.timestamp:type_name -> google.protobuf.Timestamp
+	77, // 34: mandau.agent.v1.HeartbeatRequest.status:type_name -> mandau.agent.v1.HeartbeatRequest.StatusEntry
+	80, // 35: mandau.agent.v1.HeartbeatResponse.next_heartbeat:type_name -> google.protobuf.Duration
+	78, // 36: mandau.agent.v1.HealthResponse.status:type_name -> mandau.agent.v1.HealthResponse.StatusEntry
 	8,  // 37: mandau.agent.v1.ListStacksResponse.stacks:type_name -> mandau.agent.v1.Stack
 	8,  // 38: mandau.agent.v1.GetStackResponse.stack:type_name -> mandau.agent.v1.Stack
 	13, // 39: mandau.agent.v1.ListContainersResponse.containers:type_name -> mandau.agent.v1.Container
@@ -4135,65 +4268,71 @@ var file_api_v1_agent_proto_depIdxs = []int32{
 	3,  // 41: mandau.agent.v1.CoreService.ListAgents:input_type -> mandau.agent.v1.ListAgentsRequest
 	6,  // 42: mandau.agent.v1.CoreService.RegisterAgent:input_type -> mandau.agent.v1.RegisterRequest
 	29, // 43: mandau.agent.v1.CoreService.Heartbeat:input_type -> mandau.agent.v1.HeartbeatRequest
-	6,  // 44: mandau.agent.v1.AgentService.Register:input_type -> mandau.agent.v1.RegisterRequest
-	29, // 45: mandau.agent.v1.AgentService.Heartbeat:input_type -> mandau.agent.v1.HeartbeatRequest
-	31, // 46: mandau.agent.v1.AgentService.GetCapabilities:input_type -> mandau.agent.v1.CapabilitiesRequest
-	33, // 47: mandau.agent.v1.AgentService.GetHealth:input_type -> mandau.agent.v1.HealthRequest
-	35, // 48: mandau.agent.v1.StackService.ListStacks:input_type -> mandau.agent.v1.ListStacksRequest
-	37, // 49: mandau.agent.v1.StackService.GetStack:input_type -> mandau.agent.v1.GetStackRequest
-	9,  // 50: mandau.agent.v1.StackService.ApplyStack:input_type -> mandau.agent.v1.ApplyStackRequest
-	39, // 51: mandau.agent.v1.StackService.RemoveStack:input_type -> mandau.agent.v1.RemoveStackRequest
-	10, // 52: mandau.agent.v1.StackService.DiffStack:input_type -> mandau.agent.v1.DiffStackRequest
-	40, // 53: mandau.agent.v1.StackService.GetStackLogs:input_type -> mandau.agent.v1.GetStackLogsRequest
-	41, // 54: mandau.agent.v1.ContainerService.ListContainers:input_type -> mandau.agent.v1.ListContainersRequest
-	43, // 55: mandau.agent.v1.ContainerService.InspectContainer:input_type -> mandau.agent.v1.InspectContainerRequest
-	45, // 56: mandau.agent.v1.ContainerService.StreamLogs:input_type -> mandau.agent.v1.StreamLogsRequest
-	15, // 57: mandau.agent.v1.ContainerService.Exec:input_type -> mandau.agent.v1.ExecRequest
-	46, // 58: mandau.agent.v1.ContainerService.GetStats:input_type -> mandau.agent.v1.GetStatsRequest
-	47, // 59: mandau.agent.v1.ContainerService.StartContainer:input_type -> mandau.agent.v1.StartContainerRequest
-	49, // 60: mandau.agent.v1.ContainerService.StopContainer:input_type -> mandau.agent.v1.StopContainerRequest
-	51, // 61: mandau.agent.v1.ContainerService.RestartContainer:input_type -> mandau.agent.v1.RestartContainerRequest
-	21, // 62: mandau.agent.v1.FilesystemService.ListFiles:input_type -> mandau.agent.v1.ListFilesRequest
-	24, // 63: mandau.agent.v1.FilesystemService.ReadFile:input_type -> mandau.agent.v1.ReadFileRequest
-	26, // 64: mandau.agent.v1.FilesystemService.WriteFile:input_type -> mandau.agent.v1.WriteFileRequest
-	54, // 65: mandau.agent.v1.FilesystemService.DeleteFile:input_type -> mandau.agent.v1.DeleteFileRequest
-	56, // 66: mandau.agent.v1.FilesystemService.CreateDirectory:input_type -> mandau.agent.v1.CreateDirectoryRequest
-	58, // 67: mandau.agent.v1.OperationsService.GetOperation:input_type -> mandau.agent.v1.GetOperationRequest
-	59, // 68: mandau.agent.v1.OperationsService.ListOperations:input_type -> mandau.agent.v1.ListOperationsRequest
-	61, // 69: mandau.agent.v1.OperationsService.CancelOperation:input_type -> mandau.agent.v1.CancelOperationRequest
-	63, // 70: mandau.agent.v1.OperationsService.StreamOperation:input_type -> mandau.agent.v1.StreamOperationRequest
-	4,  // 71: mandau.agent.v1.CoreService.ListAgents:output_type -> mandau.agent.v1.ListAgentsResponse
-	7,  // 72: mandau.agent.v1.CoreService.RegisterAgent:output_type -> mandau.agent.v1.RegisterResponse
-	30, // 73: mandau.agent.v1.CoreService.Heartbeat:output_type -> mandau.agent.v1.HeartbeatResponse
-	7,  // 74: mandau.agent.v1.AgentService.Register:output_type -> mandau.agent.v1.RegisterResponse
-	30, // 75: mandau.agent.v1.AgentService.Heartbeat:output_type -> mandau.agent.v1.HeartbeatResponse
-	32, // 76: mandau.agent.v1.AgentService.GetCapabilities:output_type -> mandau.agent.v1.CapabilitiesResponse
-	34, // 77: mandau.agent.v1.AgentService.GetHealth:output_type -> mandau.agent.v1.HealthResponse
-	36, // 78: mandau.agent.v1.StackService.ListStacks:output_type -> mandau.agent.v1.ListStacksResponse
-	38, // 79: mandau.agent.v1.StackService.GetStack:output_type -> mandau.agent.v1.GetStackResponse
-	28, // 80: mandau.agent.v1.StackService.ApplyStack:output_type -> mandau.agent.v1.OperationEvent
-	28, // 81: mandau.agent.v1.StackService.RemoveStack:output_type -> mandau.agent.v1.OperationEvent
-	11, // 82: mandau.agent.v1.StackService.DiffStack:output_type -> mandau.agent.v1.DiffStackResponse
-	19, // 83: mandau.agent.v1.StackService.GetStackLogs:output_type -> mandau.agent.v1.LogEntry
-	42, // 84: mandau.agent.v1.ContainerService.ListContainers:output_type -> mandau.agent.v1.ListContainersResponse
-	44, // 85: mandau.agent.v1.ContainerService.InspectContainer:output_type -> mandau.agent.v1.InspectContainerResponse
-	19, // 86: mandau.agent.v1.ContainerService.StreamLogs:output_type -> mandau.agent.v1.LogEntry
-	18, // 87: mandau.agent.v1.ContainerService.Exec:output_type -> mandau.agent.v1.ExecResponse
-	20, // 88: mandau.agent.v1.ContainerService.GetStats:output_type -> mandau.agent.v1.ContainerStats
-	48, // 89: mandau.agent.v1.ContainerService.StartContainer:output_type -> mandau.agent.v1.StartContainerResponse
-	50, // 90: mandau.agent.v1.ContainerService.StopContainer:output_type -> mandau.agent.v1.StopContainerResponse
-	52, // 91: mandau.agent.v1.ContainerService.RestartContainer:output_type -> mandau.agent.v1.RestartContainerResponse
-	22, // 92: mandau.agent.v1.FilesystemService.ListFiles:output_type -> mandau.agent.v1.ListFilesResponse
-	25, // 93: mandau.agent.v1.FilesystemService.ReadFile:output_type -> mandau.agent.v1.ReadFileResponse
-	53, // 94: mandau.agent.v1.FilesystemService.WriteFile:output_type -> mandau.agent.v1.WriteFileResponse
-	55, // 95: mandau.agent.v1.FilesystemService.DeleteFile:output_type -> mandau.agent.v1.DeleteFileResponse
-	57, // 96: mandau.agent.v1.FilesystemService.CreateDirectory:output_type -> mandau.agent.v1.CreateDirectoryResponse
-	27, // 97: mandau.agent.v1.OperationsService.GetOperation:output_type -> mandau.agent.v1.Operation
-	60, // 98: mandau.agent.v1.OperationsService.ListOperations:output_type -> mandau.agent.v1.ListOperationsResponse
-	62, // 99: mandau.agent.v1.OperationsService.CancelOperation:output_type -> mandau.agent.v1.CancelOperationResponse
-	28, // 100: mandau.agent.v1.OperationsService.StreamOperation:output_type -> mandau.agent.v1.OperationEvent
-	71, // [71:101] is the sub-list for method output_type
-	41, // [41:71] is the sub-list for method input_type
+	41, // 44: mandau.agent.v1.CoreService.ListContainers:input_type -> mandau.agent.v1.ListContainersRequest
+	53, // 45: mandau.agent.v1.CoreService.ExecuteDockerCommand:input_type -> mandau.agent.v1.DockerCommandRequest
+	6,  // 46: mandau.agent.v1.AgentService.Register:input_type -> mandau.agent.v1.RegisterRequest
+	29, // 47: mandau.agent.v1.AgentService.Heartbeat:input_type -> mandau.agent.v1.HeartbeatRequest
+	31, // 48: mandau.agent.v1.AgentService.GetCapabilities:input_type -> mandau.agent.v1.CapabilitiesRequest
+	33, // 49: mandau.agent.v1.AgentService.GetHealth:input_type -> mandau.agent.v1.HealthRequest
+	35, // 50: mandau.agent.v1.StackService.ListStacks:input_type -> mandau.agent.v1.ListStacksRequest
+	37, // 51: mandau.agent.v1.StackService.GetStack:input_type -> mandau.agent.v1.GetStackRequest
+	9,  // 52: mandau.agent.v1.StackService.ApplyStack:input_type -> mandau.agent.v1.ApplyStackRequest
+	39, // 53: mandau.agent.v1.StackService.RemoveStack:input_type -> mandau.agent.v1.RemoveStackRequest
+	10, // 54: mandau.agent.v1.StackService.DiffStack:input_type -> mandau.agent.v1.DiffStackRequest
+	40, // 55: mandau.agent.v1.StackService.GetStackLogs:input_type -> mandau.agent.v1.GetStackLogsRequest
+	41, // 56: mandau.agent.v1.ContainerService.ListContainers:input_type -> mandau.agent.v1.ListContainersRequest
+	43, // 57: mandau.agent.v1.ContainerService.InspectContainer:input_type -> mandau.agent.v1.InspectContainerRequest
+	45, // 58: mandau.agent.v1.ContainerService.StreamLogs:input_type -> mandau.agent.v1.StreamLogsRequest
+	15, // 59: mandau.agent.v1.ContainerService.Exec:input_type -> mandau.agent.v1.ExecRequest
+	46, // 60: mandau.agent.v1.ContainerService.GetStats:input_type -> mandau.agent.v1.GetStatsRequest
+	47, // 61: mandau.agent.v1.ContainerService.StartContainer:input_type -> mandau.agent.v1.StartContainerRequest
+	49, // 62: mandau.agent.v1.ContainerService.StopContainer:input_type -> mandau.agent.v1.StopContainerRequest
+	51, // 63: mandau.agent.v1.ContainerService.RestartContainer:input_type -> mandau.agent.v1.RestartContainerRequest
+	53, // 64: mandau.agent.v1.ContainerService.ExecuteDockerCommand:input_type -> mandau.agent.v1.DockerCommandRequest
+	21, // 65: mandau.agent.v1.FilesystemService.ListFiles:input_type -> mandau.agent.v1.ListFilesRequest
+	24, // 66: mandau.agent.v1.FilesystemService.ReadFile:input_type -> mandau.agent.v1.ReadFileRequest
+	26, // 67: mandau.agent.v1.FilesystemService.WriteFile:input_type -> mandau.agent.v1.WriteFileRequest
+	56, // 68: mandau.agent.v1.FilesystemService.DeleteFile:input_type -> mandau.agent.v1.DeleteFileRequest
+	58, // 69: mandau.agent.v1.FilesystemService.CreateDirectory:input_type -> mandau.agent.v1.CreateDirectoryRequest
+	60, // 70: mandau.agent.v1.OperationsService.GetOperation:input_type -> mandau.agent.v1.GetOperationRequest
+	61, // 71: mandau.agent.v1.OperationsService.ListOperations:input_type -> mandau.agent.v1.ListOperationsRequest
+	63, // 72: mandau.agent.v1.OperationsService.CancelOperation:input_type -> mandau.agent.v1.CancelOperationRequest
+	65, // 73: mandau.agent.v1.OperationsService.StreamOperation:input_type -> mandau.agent.v1.StreamOperationRequest
+	4,  // 74: mandau.agent.v1.CoreService.ListAgents:output_type -> mandau.agent.v1.ListAgentsResponse
+	7,  // 75: mandau.agent.v1.CoreService.RegisterAgent:output_type -> mandau.agent.v1.RegisterResponse
+	30, // 76: mandau.agent.v1.CoreService.Heartbeat:output_type -> mandau.agent.v1.HeartbeatResponse
+	42, // 77: mandau.agent.v1.CoreService.ListContainers:output_type -> mandau.agent.v1.ListContainersResponse
+	54, // 78: mandau.agent.v1.CoreService.ExecuteDockerCommand:output_type -> mandau.agent.v1.DockerCommandResponse
+	7,  // 79: mandau.agent.v1.AgentService.Register:output_type -> mandau.agent.v1.RegisterResponse
+	30, // 80: mandau.agent.v1.AgentService.Heartbeat:output_type -> mandau.agent.v1.HeartbeatResponse
+	32, // 81: mandau.agent.v1.AgentService.GetCapabilities:output_type -> mandau.agent.v1.CapabilitiesResponse
+	34, // 82: mandau.agent.v1.AgentService.GetHealth:output_type -> mandau.agent.v1.HealthResponse
+	36, // 83: mandau.agent.v1.StackService.ListStacks:output_type -> mandau.agent.v1.ListStacksResponse
+	38, // 84: mandau.agent.v1.StackService.GetStack:output_type -> mandau.agent.v1.GetStackResponse
+	28, // 85: mandau.agent.v1.StackService.ApplyStack:output_type -> mandau.agent.v1.OperationEvent
+	28, // 86: mandau.agent.v1.StackService.RemoveStack:output_type -> mandau.agent.v1.OperationEvent
+	11, // 87: mandau.agent.v1.StackService.DiffStack:output_type -> mandau.agent.v1.DiffStackResponse
+	19, // 88: mandau.agent.v1.StackService.GetStackLogs:output_type -> mandau.agent.v1.LogEntry
+	42, // 89: mandau.agent.v1.ContainerService.ListContainers:output_type -> mandau.agent.v1.ListContainersResponse
+	44, // 90: mandau.agent.v1.ContainerService.InspectContainer:output_type -> mandau.agent.v1.InspectContainerResponse
+	19, // 91: mandau.agent.v1.ContainerService.StreamLogs:output_type -> mandau.agent.v1.LogEntry
+	18, // 92: mandau.agent.v1.ContainerService.Exec:output_type -> mandau.agent.v1.ExecResponse
+	20, // 93: mandau.agent.v1.ContainerService.GetStats:output_type -> mandau.agent.v1.ContainerStats
+	48, // 94: mandau.agent.v1.ContainerService.StartContainer:output_type -> mandau.agent.v1.StartContainerResponse
+	50, // 95: mandau.agent.v1.ContainerService.StopContainer:output_type -> mandau.agent.v1.StopContainerResponse
+	52, // 96: mandau.agent.v1.ContainerService.RestartContainer:output_type -> mandau.agent.v1.RestartContainerResponse
+	54, // 97: mandau.agent.v1.ContainerService.ExecuteDockerCommand:output_type -> mandau.agent.v1.DockerCommandResponse
+	22, // 98: mandau.agent.v1.FilesystemService.ListFiles:output_type -> mandau.agent.v1.ListFilesResponse
+	25, // 99: mandau.agent.v1.FilesystemService.ReadFile:output_type -> mandau.agent.v1.ReadFileResponse
+	55, // 100: mandau.agent.v1.FilesystemService.WriteFile:output_type -> mandau.agent.v1.WriteFileResponse
+	57, // 101: mandau.agent.v1.FilesystemService.DeleteFile:output_type -> mandau.agent.v1.DeleteFileResponse
+	59, // 102: mandau.agent.v1.FilesystemService.CreateDirectory:output_type -> mandau.agent.v1.CreateDirectoryResponse
+	27, // 103: mandau.agent.v1.OperationsService.GetOperation:output_type -> mandau.agent.v1.Operation
+	62, // 104: mandau.agent.v1.OperationsService.ListOperations:output_type -> mandau.agent.v1.ListOperationsResponse
+	64, // 105: mandau.agent.v1.OperationsService.CancelOperation:output_type -> mandau.agent.v1.CancelOperationResponse
+	28, // 106: mandau.agent.v1.OperationsService.StreamOperation:output_type -> mandau.agent.v1.OperationEvent
+	74, // [74:107] is the sub-list for method output_type
+	41, // [41:74] is the sub-list for method input_type
 	41, // [41:41] is the sub-list for extension type_name
 	41, // [41:41] is the sub-list for extension extendee
 	0,  // [0:41] is the sub-list for field type_name
@@ -4221,7 +4360,7 @@ func file_api_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_agent_proto_rawDesc), len(file_api_v1_agent_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   74,
+			NumMessages:   76,
 			NumExtensions: 0,
 			NumServices:   6,
 		},

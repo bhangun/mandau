@@ -1,5 +1,5 @@
 server:
-  listen_addr: ":9443"
+  listen_addr: ":9444"
   tls:
     cert_path: "~/.mandau/certs/core.crt"
     key_path: "~/.mandau/certs/core.key"

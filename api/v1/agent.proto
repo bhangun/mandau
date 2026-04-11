@@ -10,7 +10,10 @@ service CoreService {
   rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
   rpc RegisterAgent(RegisterRequest) returns (RegisterResponse);
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
-  // Additional core services can be added here
+  
+  // Container proxy services
+  rpc ListContainers(ListContainersRequest) returns (ListContainersResponse);
+  rpc ExecuteDockerCommand(DockerCommandRequest) returns (stream DockerCommandResponse);
 }
 
 message ListAgentsRequest {}
@@ -122,6 +125,7 @@ service ContainerService {
   rpc StopContainer(StopContainerRequest) returns (StopContainerResponse);
   rpc RestartContainer(RestartContainerRequest)
       returns (RestartContainerResponse);
+  rpc ExecuteDockerCommand(DockerCommandRequest) returns (stream DockerCommandResponse);
 }
 
 message Container {
@@ -301,7 +305,9 @@ message GetStackLogsRequest {
   bool follow = 3;
 }
 
-message ListContainersRequest {}
+message ListContainersRequest {
+  string agent_id = 1;
+}
 message ListContainersResponse { repeated Container containers = 1; }
 message InspectContainerRequest { string container_id = 1; }
 message InspectContainerResponse { Container container = 1; }
@@ -313,6 +319,17 @@ message StopContainerRequest { string container_id = 1; }
 message StopContainerResponse {}
 message RestartContainerRequest { string container_id = 1; }
 message RestartContainerResponse {}
+
+message DockerCommandRequest {
+  string agent_id = 1;
+  repeated string args = 2;
+}
+
+message DockerCommandResponse {
+  bytes output = 1;
+  int32 exit_code = 2;
+  string error = 3;
+}
 
 message WriteFileResponse {}
 message DeleteFileRequest { string path = 1; }

@@ -24,7 +24,7 @@ print_error() {
 }
 
 # Configuration
-CORE_PORT=${MANDAU_CORE_PORT:-9443}
+CORE_PORT=${MANDAU_CORE_PORT:-3443}
 AGENT_PORT=${MANDAU_AGENT_PORT:-9444}
 CORE_PID_FILE="/tmp/mandau-core.pid"
 AGENT_PID_FILE="/tmp/mandau-agent.pid"
@@ -425,8 +425,8 @@ show_agent_status() {
 # Function to show usage
 show_usage() {
     echo "Usage: $0 [--host | --host-with-port CORE_PORT AGENT_PORT | --clean | --no-build | --help]"
-    echo "  (no args)           Build, install, and run Mandau (default, ports 9443/9444)"
-    echo "  --host              Build, install, and run Mandau (default port 9443/9444)"
+    echo "  (no args)           Build, install, and run Mandau (default, ports 3443)"
+    echo "  --host              Build, install, and run Mandau (default port 3443)"
     echo "  --host-with-port    Run Mandau with custom ports for core and agent"
     echo "  --clean             Clean up any stale processes and exit"
     echo "  --no-build          Skip build step (use existing binaries)"

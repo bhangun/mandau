@@ -19,9 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CoreService_ListAgents_FullMethodName    = "/mandau.agent.v1.CoreService/ListAgents"
-	CoreService_RegisterAgent_FullMethodName = "/mandau.agent.v1.CoreService/RegisterAgent"
-	CoreService_Heartbeat_FullMethodName     = "/mandau.agent.v1.CoreService/Heartbeat"
+	CoreService_ListAgents_FullMethodName           = "/mandau.agent.v1.CoreService/ListAgents"
+	CoreService_RegisterAgent_FullMethodName        = "/mandau.agent.v1.CoreService/RegisterAgent"
+	CoreService_Heartbeat_FullMethodName            = "/mandau.agent.v1.CoreService/Heartbeat"
+	CoreService_ListContainers_FullMethodName       = "/mandau.agent.v1.CoreService/ListContainers"
+	CoreService_ExecuteDockerCommand_FullMethodName = "/mandau.agent.v1.CoreService/ExecuteDockerCommand"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -33,6 +35,9 @@ type CoreServiceClient interface {
 	ListAgents(ctx context.Context, in *ListAgentsRequest, opts ...grpc.CallOption) (*ListAgentsResponse, error)
 	RegisterAgent(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
+	// Container proxy services
+	ListContainers(ctx context.Context, in *ListContainersRequest, opts ...grpc.CallOption) (*ListContainersResponse, error)
+	ExecuteDockerCommand(ctx context.Context, in *DockerCommandRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DockerCommandResponse], error)
 }
 
 type coreServiceClient struct {
@@ -73,6 +78,35 @@ func (c *coreServiceClient) Heartbeat(ctx context.Context, in *HeartbeatRequest,
 	return out, nil
 }
 
+func (c *coreServiceClient) ListContainers(ctx context.Context, in *ListContainersRequest, opts ...grpc.CallOption) (*ListContainersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListContainersResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListContainers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ExecuteDockerCommand(ctx context.Context, in *DockerCommandRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DockerCommandResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &CoreService_ServiceDesc.Streams[0], CoreService_ExecuteDockerCommand_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[DockerCommandRequest, DockerCommandResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type CoreService_ExecuteDockerCommandClient = grpc.ServerStreamingClient[DockerCommandResponse]
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -82,6 +116,9 @@ type CoreServiceServer interface {
 	ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error)
 	RegisterAgent(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
+	// Container proxy services
+	ListContainers(context.Context, *ListContainersRequest) (*ListContainersResponse, error)
+	ExecuteDockerCommand(*DockerCommandRequest, grpc.ServerStreamingServer[DockerCommandResponse]) error
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -100,6 +137,12 @@ func (UnimplementedCoreServiceServer) RegisterAgent(context.Context, *RegisterRe
 }
 func (UnimplementedCoreServiceServer) Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Heartbeat not implemented")
+}
+func (UnimplementedCoreServiceServer) ListContainers(context.Context, *ListContainersRequest) (*ListContainersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListContainers not implemented")
+}
+func (UnimplementedCoreServiceServer) ExecuteDockerCommand(*DockerCommandRequest, grpc.ServerStreamingServer[DockerCommandResponse]) error {
+	return status.Error(codes.Unimplemented, "method ExecuteDockerCommand not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -176,6 +219,35 @@ func _CoreService_Heartbeat_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ListContainers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListContainersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListContainers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListContainers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListContainers(ctx, req.(*ListContainersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ExecuteDockerCommand_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(DockerCommandRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(CoreServiceServer).ExecuteDockerCommand(m, &grpc.GenericServerStream[DockerCommandRequest, DockerCommandResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type CoreService_ExecuteDockerCommandServer = grpc.ServerStreamingServer[DockerCommandResponse]
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -195,8 +267,18 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Heartbeat",
 			Handler:    _CoreService_Heartbeat_Handler,
 		},
+		{
+			MethodName: "ListContainers",
+			Handler:    _CoreService_ListContainers_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ExecuteDockerCommand",
+			Handler:       _CoreService_ExecuteDockerCommand_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "api/v1/agent.proto",
 }
 
@@ -727,14 +809,15 @@ var StackService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	ContainerService_ListContainers_FullMethodName   = "/mandau.agent.v1.ContainerService/ListContainers"
-	ContainerService_InspectContainer_FullMethodName = "/mandau.agent.v1.ContainerService/InspectContainer"
-	ContainerService_StreamLogs_FullMethodName       = "/mandau.agent.v1.ContainerService/StreamLogs"
-	ContainerService_Exec_FullMethodName             = "/mandau.agent.v1.ContainerService/Exec"
-	ContainerService_GetStats_FullMethodName         = "/mandau.agent.v1.ContainerService/GetStats"
-	ContainerService_StartContainer_FullMethodName   = "/mandau.agent.v1.ContainerService/StartContainer"
-	ContainerService_StopContainer_FullMethodName    = "/mandau.agent.v1.ContainerService/StopContainer"
-	ContainerService_RestartContainer_FullMethodName = "/mandau.agent.v1.ContainerService/RestartContainer"
+	ContainerService_ListContainers_FullMethodName       = "/mandau.agent.v1.ContainerService/ListContainers"
+	ContainerService_InspectContainer_FullMethodName     = "/mandau.agent.v1.ContainerService/InspectContainer"
+	ContainerService_StreamLogs_FullMethodName           = "/mandau.agent.v1.ContainerService/StreamLogs"
+	ContainerService_Exec_FullMethodName                 = "/mandau.agent.v1.ContainerService/Exec"
+	ContainerService_GetStats_FullMethodName             = "/mandau.agent.v1.ContainerService/GetStats"
+	ContainerService_StartContainer_FullMethodName       = "/mandau.agent.v1.ContainerService/StartContainer"
+	ContainerService_StopContainer_FullMethodName        = "/mandau.agent.v1.ContainerService/StopContainer"
+	ContainerService_RestartContainer_FullMethodName     = "/mandau.agent.v1.ContainerService/RestartContainer"
+	ContainerService_ExecuteDockerCommand_FullMethodName = "/mandau.agent.v1.ContainerService/ExecuteDockerCommand"
 )
 
 // ContainerServiceClient is the client API for ContainerService service.
@@ -751,6 +834,7 @@ type ContainerServiceClient interface {
 	StartContainer(ctx context.Context, in *StartContainerRequest, opts ...grpc.CallOption) (*StartContainerResponse, error)
 	StopContainer(ctx context.Context, in *StopContainerRequest, opts ...grpc.CallOption) (*StopContainerResponse, error)
 	RestartContainer(ctx context.Context, in *RestartContainerRequest, opts ...grpc.CallOption) (*RestartContainerResponse, error)
+	ExecuteDockerCommand(ctx context.Context, in *DockerCommandRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DockerCommandResponse], error)
 }
 
 type containerServiceClient struct {
@@ -862,6 +946,25 @@ func (c *containerServiceClient) RestartContainer(ctx context.Context, in *Resta
 	return out, nil
 }
 
+func (c *containerServiceClient) ExecuteDockerCommand(ctx context.Context, in *DockerCommandRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DockerCommandResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ContainerService_ServiceDesc.Streams[3], ContainerService_ExecuteDockerCommand_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[DockerCommandRequest, DockerCommandResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ContainerService_ExecuteDockerCommandClient = grpc.ServerStreamingClient[DockerCommandResponse]
+
 // ContainerServiceServer is the server API for ContainerService service.
 // All implementations must embed UnimplementedContainerServiceServer
 // for forward compatibility.
@@ -876,6 +979,7 @@ type ContainerServiceServer interface {
 	StartContainer(context.Context, *StartContainerRequest) (*StartContainerResponse, error)
 	StopContainer(context.Context, *StopContainerRequest) (*StopContainerResponse, error)
 	RestartContainer(context.Context, *RestartContainerRequest) (*RestartContainerResponse, error)
+	ExecuteDockerCommand(*DockerCommandRequest, grpc.ServerStreamingServer[DockerCommandResponse]) error
 	mustEmbedUnimplementedContainerServiceServer()
 }
 
@@ -909,6 +1013,9 @@ func (UnimplementedContainerServiceServer) StopContainer(context.Context, *StopC
 }
 func (UnimplementedContainerServiceServer) RestartContainer(context.Context, *RestartContainerRequest) (*RestartContainerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RestartContainer not implemented")
+}
+func (UnimplementedContainerServiceServer) ExecuteDockerCommand(*DockerCommandRequest, grpc.ServerStreamingServer[DockerCommandResponse]) error {
+	return status.Error(codes.Unimplemented, "method ExecuteDockerCommand not implemented")
 }
 func (UnimplementedContainerServiceServer) mustEmbedUnimplementedContainerServiceServer() {}
 func (UnimplementedContainerServiceServer) testEmbeddedByValue()                          {}
@@ -1050,6 +1157,17 @@ func _ContainerService_RestartContainer_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ContainerService_ExecuteDockerCommand_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(DockerCommandRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ContainerServiceServer).ExecuteDockerCommand(m, &grpc.GenericServerStream[DockerCommandRequest, DockerCommandResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ContainerService_ExecuteDockerCommandServer = grpc.ServerStreamingServer[DockerCommandResponse]
+
 // ContainerService_ServiceDesc is the grpc.ServiceDesc for ContainerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1093,6 +1211,11 @@ var ContainerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "GetStats",
 			Handler:       _ContainerService_GetStats_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ExecuteDockerCommand",
+			Handler:       _ContainerService_ExecuteDockerCommand_Handler,
 			ServerStreams: true,
 		},
 	},

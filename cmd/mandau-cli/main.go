@@ -23,8 +23,8 @@ var (
 
 	cli     = &CLI{}
 	rootCmd = &cobra.Command{
-		Use:   "mandau",
-		Short: "Mandau infrastructure control CLI",
+		Use:     "mandau",
+		Short:   "Mandau infrastructure control CLI",
 		Version: version, // Add version flag
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			return cli.connect(cmd)
@@ -35,6 +35,16 @@ var (
 			}
 			return nil
 		},
+	}
+
+	agentCmd = &cobra.Command{
+		Use:   "agent",
+		Short: "Agent management",
+	}
+
+	stackCmd = &cobra.Command{
+		Use:   "stack",
+		Short: "Stack management",
 	}
 )
 
@@ -48,16 +58,13 @@ type CLI struct {
 func main() {
 
 	// Global flags
-	rootCmd.PersistentFlags().String("server", "localhost:9443", "Core server address")
+	rootCmd.PersistentFlags().String("server", "localhost:3443", "Core server address")
 	rootCmd.PersistentFlags().String("cert", "", "Client certificate")
 	rootCmd.PersistentFlags().String("key", "", "Client key")
 	rootCmd.PersistentFlags().String("ca", "", "CA certificate")
+	rootCmd.PersistentFlags().StringP("agent", "a", "", "Target agent ID")
 
 	// Agent commands
-	agentCmd := &cobra.Command{
-		Use:   "agent",
-		Short: "Agent management",
-	}
 
 	agentCmd.AddCommand(&cobra.Command{
 		Use:   "list",
@@ -66,10 +73,6 @@ func main() {
 	})
 
 	// Stack commands
-	stackCmd := &cobra.Command{
-		Use:   "stack",
-		Short: "Stack management",
-	}
 
 	stackCmd.AddCommand(&cobra.Command{
 		Use:   "list [agent-id]",
@@ -174,7 +177,7 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 		c.config = cfg
 	}
 
-	serverAddr, err := c.getFlagOrEnv(cmd, "server", "MANDAU_SERVER", "localhost:9443")
+	serverAddr, err := c.getFlagOrEnv(cmd, "server", "MANDAU_SERVER", "localhost:3443")
 	if err != nil {
 		return err
 	}
@@ -199,7 +202,7 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 		homeDir, errHome := os.UserHomeDir()
 		if errHome == nil {
 			mandauCertDir := filepath.Join(homeDir, ".mandau", "certs")
-			
+
 			// Check if auto-discovery directory exists
 			if _, err := os.Stat(mandauCertDir); err == nil {
 				// Use auto-discovered certificates if not explicitly provided
@@ -221,7 +224,7 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 						caFile = autoCA
 					}
 				}
-				
+
 				if certFile != "" && keyFile != "" && caFile != "" {
 					fmt.Printf("Using auto-discovered certificates from %s\n", mandauCertDir)
 				}
@@ -294,6 +297,13 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 
 	conn, err := grpc.Dial(serverAddr, grpc.WithTransportCredentials(creds))
 	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "x509") || strings.Contains(errStr, "authentication handshake failed") {
+			return fmt.Errorf("TLS connection failed: %v\n\n"+
+				"💡 PRO-TIP: If you recently rotated certificates using 'mandau cert gen', \n"+
+				"you MUST restart the core and agent services to apply changes:\n\n"+
+				"  sudo systemctl restart mandau-core mandau-agent", err)
+		}
 		return fmt.Errorf("dial: %w", err)
 	}
 
@@ -486,7 +496,7 @@ func deleteUser(cmd *cobra.Command, args []string) error {
 
 // createUserViaAPI creates a user via the REST API
 func (c *CLI) createUserViaAPI(username, password, role string) error {
-	serverAddr, err := c.getFlagOrEnv(nil, "server", "MANDAU_SERVER", "localhost:9443")
+	serverAddr, err := c.getFlagOrEnv(nil, "server", "MANDAU_SERVER", "localhost:3443")
 	if err != nil {
 		return err
 	}
@@ -542,4 +552,34 @@ func (c *CLI) deleteUserViaAPI(username string) error {
 func (c *CLI) listUsersViaAPI() error {
 	fmt.Println("Note: User listing API integration pending")
 	return nil
+}
+
+func (c *CLI) resolveAgent(cmd *cobra.Command) (string, error) {
+	// 1. Check flag
+	agentID, _ := cmd.Flags().GetString("agent")
+	if agentID != "" {
+		return agentID, nil
+	}
+
+	// 2. Check default in config
+	if c.config.DefaultAgent != "" {
+		return c.config.DefaultAgent, nil
+	}
+
+	// 3. Fallback: Get first agent from list
+	resp, err := c.coreClient.ListAgents(context.Background(), &v1.ListAgentsRequest{})
+	if err == nil && len(resp.Agents) > 0 {
+		firstAgent := resp.Agents[0].Id
+		fmt.Printf("ℹ No agent specified, using first available: %s\n", firstAgent)
+		
+		// Auto-save as default
+		c.config.DefaultAgent = firstAgent
+		homeDir, _ := os.UserHomeDir()
+		configPath := filepath.Join(homeDir, ".mandau", "config.yaml")
+		_ = config.SaveCoreConfig(configPath, c.config)
+		
+		return firstAgent, nil
+	}
+
+	return "", fmt.Errorf("no agent specified and no agents available. Connect an agent first.")
 }

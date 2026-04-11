@@ -16,7 +16,7 @@ server:
     server_name: "mandau-agent"
 
 server_connection:
-  core_addr: "localhost:9443"
+  core_addr: "localhost:9444"
   tls:
     cert_path: "~/.mandau/certs/agent.crt"
     key_path: "~/.mandau/certs/agent.key"

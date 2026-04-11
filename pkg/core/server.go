@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -126,7 +127,7 @@ func NewCore(cfg *CoreConfig) (*Core, error) {
 	}
 
 	// Update the CoreConfig with values from the loaded config
-	if fullConfig.Server.ListenAddr != "" {
+	if cfg.ListenAddr == "" && fullConfig.Server.ListenAddr != "" {
 		cfg.ListenAddr = fullConfig.Server.ListenAddr
 	}
 	if fullConfig.Server.TLS.CertPath != "" {
@@ -955,4 +956,65 @@ func (c *Core) GetStackLogs(req *agentv1.GetStackLogsRequest, stream agentv1.Sta
 			return err
 		}
 	}
+}
+
+// =============================================================================
+// CONTAINER SERVICE IMPLEMENTATIONS (PROXY TO AGENTS)
+// =============================================================================
+
+func (c *Core) ListContainers(ctx context.Context, req *agentv1.ListContainersRequest) (*agentv1.ListContainersResponse, error) {
+	agentID := req.AgentId
+	if agentID == "" {
+		return nil, fmt.Errorf("agent_id is required")
+	}
+
+	conn, err := c.getAgentConnection(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("get agent connection: %w", err)
+	}
+
+	containerClient := agentv1.NewContainerServiceClient(conn.Client)
+
+	resp, err := containerClient.ListContainers(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("forward to agent: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (c *Core) ExecuteDockerCommand(req *agentv1.DockerCommandRequest, stream agentv1.CoreService_ExecuteDockerCommandServer) error {
+	agentID := req.AgentId
+	if agentID == "" {
+		return fmt.Errorf("agent_id is required")
+	}
+
+	conn, err := c.getAgentConnection(agentID)
+	if err != nil {
+		return fmt.Errorf("get agent connection: %w", err)
+	}
+
+	// Create container service client for this agent
+	containerClient := agentv1.NewContainerServiceClient(conn.Client)
+
+	// Forward the request to the agent
+	proxyStream, err := containerClient.ExecuteDockerCommand(stream.Context(), req)
+	if err != nil {
+		return fmt.Errorf("forward to agent: %w", err)
+	}
+
+	for {
+		resp, err := proxyStream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("recv from agent: %w", err)
+		}
+		if err := stream.Send(resp); err != nil {
+			return fmt.Errorf("send to client: %w", err)
+		}
+	}
+
+	return nil
 }

@@ -1,0 +1,10 @@
+Loaded configuration from /Users/bhangun/.mandau/config.yaml
+Agent registered with ID: agent-local
+Mandau Agent agent-local listening on :8444
+Hostname: aba.local
+Stack root: ./stacks
+Plugins loaded: 1
+
+Received signal terminated, shutting down...
+Shutting down agent...
+Agent stopped

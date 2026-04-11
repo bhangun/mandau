@@ -67,7 +67,7 @@ Examples:
 	}
 
 	genCmd.Flags().StringVar(&certDir, "cert-dir", "", "Certificate output directory (default: ~/.mandau/certs)")
-	genCmd.Flags().StringVar(&caDir, "ca-dir", "", "CA directory (contains ca.key and ca.crt)")
+	genCmd.Flags().StringVar(&caDir, "ca-dir", "", "CA directory (default: same as cert-dir)")
 	genCmd.Flags().StringVar(&coreHostname, "core-hostname", "localhost", "Core server hostname")
 	genCmd.Flags().StringVar(&coreIP, "core-ip", "127.0.0.1", "Core server IP address")
 	genCmd.Flags().StringVar(&agentHostname, "agent-hostname", "localhost", "Agent server hostname")
@@ -127,7 +127,7 @@ Examples:
 	}
 
 	rotateCmd.Flags().StringVar(&certDir, "cert-dir", "", "Certificate directory (default: ~/.mandau/certs)")
-	rotateCmd.Flags().StringVar(&caDir, "ca-dir", "", "CA directory (default: ~/.mandau/ca)")
+	rotateCmd.Flags().StringVar(&caDir, "ca-dir", "", "CA directory (default: ~/.mandau/certs)")
 	rotateCmd.Flags().StringVar(&coreHostname, "core-hostname", "localhost", "Core server hostname")
 	rotateCmd.Flags().StringVar(&coreIP, "core-ip", "127.0.0.1", "Core server IP address")
 	rotateCmd.Flags().StringVar(&agentHostname, "agent-hostname", "localhost", "Agent server hostname")
@@ -182,7 +182,7 @@ func getDefaultCertDir() string {
 	return filepath.Join(homeDir, ".mandau", "certs")
 }
 
-// getDefaultCADir returns the default CA directory (~/.mandau/ca)
+// getDefaultCADir returns the default CA directory (~/.mandau/certs)
 func getDefaultCADir() string {
 	if caDir != "" {
 		return caDir
@@ -191,7 +191,7 @@ func getDefaultCADir() string {
 	if err != nil {
 		return "./ca"
 	}
-	return filepath.Join(homeDir, ".mandau", "ca")
+	return filepath.Join(homeDir, ".mandau", "certs")
 }
 
 // runCertGen generates certificates based on command arguments
@@ -213,8 +213,10 @@ func runCertGen(cmd *cobra.Command, args []string) error {
 	if err := os.MkdirAll(certDir, 0700); err != nil {
 		return fmt.Errorf("create cert dir: %w", err)
 	}
-	if err := os.MkdirAll(caDir, 0700); err != nil {
-		return fmt.Errorf("create CA dir: %w", err)
+	if caDir != certDir {
+		if err := os.MkdirAll(caDir, 0700); err != nil {
+			return fmt.Errorf("create CA dir: %w", err)
+		}
 	}
 
 	switch component {
@@ -248,11 +250,13 @@ func generateAllCerts(certDir, caDir string) error {
 		return err
 	}
 
-	// Copy CA cert to cert dir for convenience
-	caCertPath := filepath.Join(caDir, "ca.crt")
-	caCertDest := filepath.Join(certDir, "ca.crt")
-	if err := copyFile(caCertPath, caCertDest); err != nil {
-		return fmt.Errorf("copy CA cert: %w", err)
+	// If CA and Cert dirs are different, copy CA cert to cert dir for convenience
+	if caDir != certDir {
+		caCertPath := filepath.Join(caDir, "ca.crt")
+		caCertDest := filepath.Join(certDir, "ca.crt")
+		if err := copyFile(caCertPath, caCertDest); err != nil {
+			return fmt.Errorf("copy CA cert: %w", err)
+		}
 	}
 
 	// Step 2: Generate core certificate

@@ -1,11 +1,12 @@
 #!/bin/bash
-
+# =============================================================================
 # Mandau Installation Script
-# This script automatically detects your platform and installs the appropriate Mandau binaries
-# Supports both development (self-signed CA) and production (centralized CA) deployments
+# =============================================================================
+# Automates platform detection, binary installation, certificate generation,
+# and systemd service configuration for Mandau Core and Agent.
+# =============================================================================
 
-# Don't exit immediately on error - we'll handle errors explicitly
-# set -e is too aggressive for this script
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -15,8 +16,8 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
-# Print colored output
-print_status() {
+# Print functions
+print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
 
@@ -32,667 +33,392 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
-print_dev() {
-    echo -e "${PURPLE}[DEV]${NC} $1"
+print_step() {
+    echo ""
+    echo -e "${PURPLE}[STEP]${NC} $1"
+    echo "─────────────────────────────────────────────────────"
 }
 
-# Detect OS and architecture
+# Detection Variables
+OS=""
+ARCH=""
+LATEST_VERSION=""
+ORIGINAL_USER=""
+ORIGINAL_HOME=""
+
+# Detect platform
 detect_platform() {
-    OS=""
-    ARCH=""
-
-    # Detect OS
+    print_step "Detecting Platform"
+    
     case "$(uname -s)" in
-        Linux*)
-            OS="linux"
-            ;;
-        Darwin*)
-            OS="darwin"
-            ;;
-        *)
-            print_error "Unsupported operating system: $(uname -s)"
-            exit 1
-            ;;
+        Linux*)  OS="linux" ;;
+        Darwin*) OS="darwin" ;;
+        *)       print_error "Unsupported OS: $(uname -s)"; exit 1 ;;
     esac
 
-    # Detect architecture
     case "$(uname -m)" in
-        x86_64|amd64)
-            ARCH="amd64"
-            ;;
-        aarch64|arm64)
-            ARCH="arm64"
-            ;;
-        *)
-            print_error "Unsupported architecture: $(uname -m)"
-            exit 1
-            ;;
+        x86_64|amd64) ARCH="amd64" ;;
+        aarch64|arm64) ARCH="arm64" ;;
+        *)             print_error "Unsupported architecture: $(uname -m)"; exit 1 ;;
     esac
 
-    print_status "Detected platform: ${OS}/${ARCH}"
+    print_success "Detected: ${OS}/${ARCH}"
 }
 
-# Get the latest release version from GitHub API
-get_latest_version() {
-    print_status "Fetching latest release version..."
+# Pre-flight checks
+preflight_checks() {
+    print_step "Pre-flight Checks"
 
-    # Allow override via environment variable
-    if [ -n "$MANDAU_VERSION" ]; then
-        LATEST_VERSION="$MANDAU_VERSION"
-        print_status "Using specified version: $LATEST_VERSION"
-        return 0
-    fi
-
-    # Try multiple approaches to get the latest release
-    # Method 1: GitHub API with redirect handling
-    LATEST_VERSION=$(curl -sL "https://api.github.com/repos/bhangun/mandau/releases/latest" \
-        -H "Accept: application/vnd.github.v3+json" \
-        2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-
-    # Method 2: Try following the redirect to releases page
-    if [ -z "$LATEST_VERSION" ]; then
-        LATEST_VERSION=$(curl -sL "https://github.com/bhangun/mandau/releases/latest" \
-            -o /dev/null -w '%{url_effective}' 2>/dev/null | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+')
-    fi
-
-    # Method 3: Try listing releases
-    if [ -z "$LATEST_VERSION" ]; then
-        LATEST_VERSION=$(curl -s "https://api.github.com/repos/bhangun/mandau/releases?per_page=1" \
-            2>/dev/null | grep '"tag_name":' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
-    fi
-
-    if [ -z "$LATEST_VERSION" ]; then
-        print_error "Failed to fetch latest version from GitHub API"
-        print_warning "You can specify a version manually with: MANDAU_VERSION=v0.0.17 ./install.sh"
-        print_info "Available releases: https://github.com/bhangun/mandau/releases"
-        exit 1
-    else
-        print_status "Latest version: $LATEST_VERSION"
-    fi
-}
-
-# Generate certificates if they don't exist
-# Supports both development (self-signed CA) and production (centralized CA) modes
-generate_certificates() {
-    local cert_dir="$1"
-    local original_user="$2"
-    local ca_cert="${MANDAU_CA_CERT:-}"
-    local ca_key="${MANDAU_CA_KEY:-}"
-    local core_hostname="${MANDAU_CORE_HOSTNAME:-localhost}"
-    local core_ip="${MANDAU_CORE_IP:-127.0.0.1}"
-    local agent_hostname="${MANDAU_AGENT_HOSTNAME:-localhost}"
-    local agent_ip="${MANDAU_AGENT_IP:-127.0.0.1}"
-
-    if [ -d "$cert_dir" ] && [ -f "$cert_dir/ca.crt" ]; then
-        print_status "Certificates already exist in $cert_dir, skipping generation"
-        return 0
-    fi
-
-    print_status "Generating certificates in $cert_dir..."
-
-    # Create the certificates directory with proper permissions
-    mkdir -p "$cert_dir"
-    chown "$original_user:$original_user" "$cert_dir"
-    chmod 700 "$cert_dir"  # Restrict access to owner only
-
-    # Check if we're using external CA (production mode)
-    if [ -n "$ca_cert" ] && [ -f "$ca_cert" ]; then
-        print_status "Using external CA certificate from: $ca_cert"
-        cp "$ca_cert" "$cert_dir/ca.crt"
-        
-        if [ -n "$ca_key" ] && [ -f "$ca_key" ]; then
-            print_status "Using external CA key from: $ca_key"
-            cp "$ca_key" "$cert_dir/ca.key"
-            chmod 600 "$cert_dir/ca.key"
-        else
-            print_warning "CA key not provided - cannot generate server certificates"
-            print_status "Please generate server certificates manually or provide CA key via MANDAU_CA_KEY"
-            chown -R "$original_user:$original_user" "$cert_dir"
-            return 0
-        fi
-    else
-        print_status "Generating new CA certificate (development mode)"
-        print_warning "For production, use cert-distribute.sh with centralized CA management"
-        
-        # Generate CA certificate
-        openssl genrsa -out "$cert_dir/ca.key" 4096
-        openssl req -new -x509 -days 3650 -key "$cert_dir/ca.key" \
-            -out "$cert_dir/ca.crt" \
-            -subj "/CN=Mandau CA/O=Mandau/C=US" -nodes
-    fi
-
-    # Generate Core certificate
-    print_status "Generating core server certificate for $core_hostname ($core_ip)..."
-    openssl genrsa -out "$cert_dir/core.key" 4096
-    openssl req -new -key "$cert_dir/core.key" \
-        -out "$cert_dir/core.csr" \
-        -subj "/CN=mandau-core/O=Mandau/C=US" -nodes
-
-    cat > "$cert_dir/core.ext" <<EOF
-subjectAltName = DNS:${core_hostname},DNS:localhost,IP:${core_ip},IP:127.0.0.1
-extendedKeyUsage = serverAuth,clientAuth
-EOF
-
-    openssl x509 -req -in "$cert_dir/core.csr" \
-        -CA "$cert_dir/ca.crt" -CAkey "$cert_dir/ca.key" \
-        -CAcreateserial -out "$cert_dir/core.crt" \
-        -days 365 -extfile "$cert_dir/core.ext"
-
-    # Generate Agent certificate
-    print_status "Generating agent certificate for $agent_hostname ($agent_ip)..."
-    openssl genrsa -out "$cert_dir/agent.key" 4096
-    openssl req -new -key "$cert_dir/agent.key" \
-        -out "$cert_dir/agent.csr" \
-        -subj "/CN=${agent_hostname}/O=Mandau/C=US" -nodes
-
-    cat > "$cert_dir/agent.ext" <<EOF
-subjectAltName = DNS:${agent_hostname},DNS:mandau-agent,DNS:localhost,IP:${agent_ip},IP:127.0.0.1
-extendedKeyUsage = serverAuth,clientAuth
-EOF
-
-    openssl x509 -req -in "$cert_dir/agent.csr" \
-        -CA "$cert_dir/ca.crt" -CAkey "$cert_dir/ca.key" \
-        -CAcreateserial -out "$cert_dir/agent.crt" \
-        -days 365 -extfile "$cert_dir/agent.ext"
-
-    # Generate CLI client certificate
-    print_status "Generating CLI client certificate..."
-    openssl genrsa -out "$cert_dir/client.key" 4096
-    openssl req -new -key "$cert_dir/client.key" \
-        -out "$cert_dir/client.csr" \
-        -subj "/CN=mandau-cli/O=Mandau/C=US" -nodes
-
-    cat > "$cert_dir/client.ext" <<EOF
-extendedKeyUsage = clientAuth
-EOF
-
-    openssl x509 -req -in "$cert_dir/client.csr" \
-        -CA "$cert_dir/ca.crt" -CAkey "$cert_dir/ca.key" \
-        -CAcreateserial -out "$cert_dir/client.crt" \
-        -days 365 -extfile "$cert_dir/client.ext"
-
-    # Set proper permissions
-    chmod 600 "$cert_dir"/*.key
-    chmod 644 "$cert_dir"/*.crt "$cert_dir"/*.ext "$cert_dir"/ca.srl
-
-    # Set ownership to the original user
-    chown -R "$original_user:$original_user" "$cert_dir"
-
-    print_success "Certificates generated in $cert_dir"
-    print_status "Core server: $core_hostname ($core_ip)"
-    print_status "Agent server: $agent_hostname ($agent_ip)"
-}
-
-# Create systemd service files with absolute paths
-create_systemd_services() {
-    local original_user="$1"
-    local original_home="$2"
-    local core_port="${MANDAU_CORE_PORT:-9443}"
-
-    print_status "Creating systemd service files with absolute paths..."
-
-    # Create mandau-core.service
-    cat > "/tmp/mandau-core.service" << EOF
-[Unit]
-Description=Mandau Core Service
-After=network.target docker.service
-Requires=docker.service
-
-[Service]
-Type=simple
-User=$original_user
-Group=$original_user
-Environment="MANDAU_ADMIN_USER=${MANDAU_ADMIN_USER:-admin}"
-ExecStart=/usr/local/bin/mandau-core -listen :${core_port} -cert $original_home/.mandau/certs/core.crt -key $original_home/.mandau/certs/core.key -ca $original_home/.mandau/certs/ca.crt
-Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=$original_home/.mandau $original_home/mandau-stacks /tmp
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    # Create mandau-agent.service
-    cat > "/tmp/mandau-agent.service" << EOF
-[Unit]
-Description=Mandau Agent Service
-After=network.target mandau-core.service
-Wants=mandau-core.service
-
-[Service]
-Type=simple
-User=$original_user
-Group=$original_user
-ExecStart=/usr/local/bin/mandau-agent -server localhost:${core_port} -cert $original_home/.mandau/certs/agent.crt -key $original_home/.mandau/certs/agent.key -ca $original_home/.mandau/certs/ca.crt -stack-root $original_home/mandau-stacks
-Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=$original_home/.mandau $original_home/mandau-stacks /var/run/docker.sock /tmp
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    # Copy service files to system location with sudo
-    if command -v sudo >/dev/null 2>&1; then
-        SUDO="sudo"
-    else
-        SUDO=""
-    fi
-
-    if [ -n "$SUDO" ]; then
-        $SUDO cp /tmp/mandau-core.service /etc/systemd/system/
-        $SUDO cp /tmp/mandau-agent.service /etc/systemd/system/
-        $SUDO systemctl daemon-reload
-        print_success "Systemd service files created and loaded"
-    else
-        print_warning "Cannot create systemd service files without sudo access"
-        print_status "You'll need to manually create the service files with absolute paths"
-    fi
-}
-
-# Create default configuration with profile support
-create_default_config() {
-    local original_user="$1"
-    local original_home="$2"
-    local core_port="${MANDAU_CORE_PORT:-9443}"
-
-    print_status "Creating default configuration with profile support..."
-
-    CONFIG_DIR="$original_home/.mandau"
-    mkdir -p "$CONFIG_DIR"
-
-    # Create main config file with profile support
-    cat > "$CONFIG_DIR/config.yaml" << EOF
-# Mandau Unified Configuration with Profile Support
-# This is the default profile (production)
-server:
-  listen_addr: "localhost:${core_port}"  # For core server: address to listen on; For client: remote server address
-  tls:
-    cert_path: "$original_home/.mandau/certs/client.crt"  # Client certificate
-    key_path: "$original_home/.mandau/certs/client.key"   # Client key
-    ca_path: "$original_home/.mandau/certs/ca.crt"        # CA certificate
-    min_version: "TLS1.3"
-    server_name: "mandau-core"
-timeout: "30s"
-# For remote server usage, update server.listen_addr to your remote server (e.g., "myserver.com:${core_port}")
-EOF
-
-    # Create development profile
-    cat > "$CONFIG_DIR/dev.yaml" << EOF
-# Development Profile Configuration
-server:
-  listen_addr: "localhost:${core_port}"
-  tls:
-    cert_path: "$original_home/.mandau/certs/client.crt"
-    key_path: "$original_home/.mandau/certs/client.key"
-    ca_path: "$original_home/.mandau/certs/ca.crt"
-    min_version: "TLS1.3"
-    server_name: "mandau-core"
-timeout: "30s"
-# Development-specific settings can go here
-EOF
-
-    # Create local development profile for testing
-    cat > "$CONFIG_DIR/local.yaml" << EOF
-# Local Development Profile Configuration
-server:
-  listen_addr: "localhost:${core_port}"
-  tls:
-    cert_path: "$original_home/.mandau/certs/client.crt"
-    key_path: "$original_home/.mandau/certs/client.key"
-    ca_path: "$original_home/.mandau/certs/ca.crt"
-    min_version: "TLS1.3"
-    server_name: "mandau-core"
-timeout: "10s"
-# Local development settings
-EOF
-
-    # Set appropriate permissions for the config directory and files
-    chown -R "$original_user:$original_user" "$CONFIG_DIR"
-    chmod 700 "$CONFIG_DIR"
-    chmod 600 "$CONFIG_DIR/config.yaml"
-    chmod 600 "$CONFIG_DIR/dev.yaml"
-    chmod 600 "$CONFIG_DIR/local.yaml"
-
-    print_success "Default configuration created at $CONFIG_DIR/"
-    print_dev "Development profiles created: dev.yaml, local.yaml"
-    print_status "Use MANDAU_PROFILE=dev to use development configuration"
-    print_status "Certificates are located in ~/mandau-certs/ (first-class location)"
-}
-
-# Download and install binaries
-download_and_install() {
-    local version=$1
-    local os=$2
-    local arch=$3
-
-    # Construct download URL based on platform
-    # The version from GitHub API includes 'v' prefix (e.g., v0.0.7) but release assets use version without 'v'
-    VERSION_NO_V="${version#v}"  # Strip the 'v' prefix for the filename
-    if [ "$os" = "windows" ]; then
-        # Windows uses .zip format
-        FILENAME="mandau-windows-${arch}-${VERSION_NO_V}.zip"
-        URL="https://github.com/bhangun/mandau/releases/download/${version}/${FILENAME}"
-    else
-        # Linux/macOS use .tar.gz format
-        FILENAME="mandau-${os}-${arch}-${VERSION_NO_V}.tar.gz"
-        URL="https://github.com/bhangun/mandau/releases/download/${version}/${FILENAME}"
-    fi
-
-    print_status "Downloading Mandau binaries from: $URL"
-
-    # Create temporary directory
-    TEMP_DIR=$(mktemp -d)
-    cd "$TEMP_DIR"
-
-    # Download the file - temporarily disable set -e for this operation
-    set +e
-    if command -v wget >/dev/null 2>&1; then
-        print_status "Using wget to download $URL"
-        wget -q "$URL" -O "$FILENAME"
-        DOWNLOAD_STATUS=$?
-    elif command -v curl >/dev/null 2>&1; then
-        print_status "Using curl to download $URL"
-        curl -fsSL -o "$FILENAME" "$URL"
-        DOWNLOAD_STATUS=$?
-    else
-        print_error "Neither wget nor curl is available"
-        rm -rf "$TEMP_DIR"
-        exit 1
-    fi
-    set -e
-
-    if [ $DOWNLOAD_STATUS -ne 0 ]; then
-        print_error "Failed to download $FILENAME (exit code: $DOWNLOAD_STATUS)"
-        print_error "URL attempted: $URL"
-        ls -la "$TEMP_DIR"  # Show what's in the temp directory
-        rm -rf "$TEMP_DIR"
-        exit 1
-    fi
-
-    print_status "Downloaded $FILENAME successfully"
-    print_status "File size: $(ls -lah $FILENAME | awk '{print $5}')"
-
-    # Extract the archive
-    print_status "Extracting $FILENAME..."
-    set +e
-    if [[ "$FILENAME" == *.tar.gz ]]; then
-        tar -xzf "$FILENAME"
-        EXTRACT_STATUS=$?
-    elif [[ "$FILENAME" == *.zip ]]; then
-        unzip -q "$FILENAME"
-        EXTRACT_STATUS=$?
-    else
-        print_error "Unknown archive format: $FILENAME"
-        EXTRACT_STATUS=1
-    fi
-    set -e
-
-    if [ $EXTRACT_STATUS -ne 0 ]; then
-        print_error "Failed to extract $FILENAME (exit code: $EXTRACT_STATUS)"
-        ls -la  # Show contents after failed extraction
-        rm -rf "$TEMP_DIR"
-        exit 1
-    fi
-
-    print_status "Extraction completed successfully"
-    print_status "Contents of extraction directory:"
-    ls -la
-
-    # Make binaries executable (not needed for Windows)
-    if [ "$os" != "windows" ]; then
-        print_status "Making binaries executable..."
-        set +e
-        chmod +x mandau mandau-core mandau-agent
-        CHMOD_STATUS=$?
-        set -e
-        if [ $CHMOD_STATUS -ne 0 ]; then
-            print_error "Failed to make binaries executable (exit code: $CHMOD_STATUS)"
-            ls -la
-            rm -rf "$TEMP_DIR"
+    # Check for required tools
+    local tools=("curl" "openssl")
+    for tool in "${tools[@]}"; do
+        if ! command -v "$tool" &> /dev/null; then
+            print_error "'$tool' is required but not installed."
             exit 1
         fi
-        print_status "Binaries made executable successfully"
-    fi
+    done
 
-    # Install to system location
-    if [ "$os" != "windows" ]; then
-        # Check if we have sudo access
-        if command -v sudo >/dev/null 2>&1; then
-            SUDO="sudo"
+    # Check for systemd on Linux
+    if [ "$OS" == "linux" ]; then
+        if ! pidof systemd &>/dev/null && [ ! -d /run/systemd/system ]; then
+            print_warning "systemd not detected. Services will not be configured."
+            HAS_SYSTEMD=false
         else
-            SUDO=""
+            HAS_SYSTEMD=true
         fi
-
-        # Verify binaries exist before installing
-        if [ ! -f "mandau" ] || [ ! -f "mandau-core" ] || [ ! -f "mandau-agent" ]; then
-            print_error "Required binaries not found in extracted archive. Available files:"
-            ls -la
-            cd - >/dev/null
-            rm -rf "$TEMP_DIR"
-            exit 1
-        fi
-
-        # Install binaries
-        if [ -n "$SUDO" ] && [ "$EUID" -ne 0 ]; then
-            # Use sudo if available and not running as root
-            set +e
-            $SUDO install -m 755 mandau mandau-core mandau-agent /usr/local/bin/
-            INSTALL_STATUS=$?
-            set -e
-            if [ $INSTALL_STATUS -ne 0 ]; then
-                # Fallback to cp if install command fails
-                print_warning "install command failed, trying cp as fallback..."
-                set +e
-                $SUDO cp mandau mandau-core mandau-agent /usr/local/bin/
-                $SUDO chmod 755 /usr/local/bin/mandau /usr/local/bin/mandau-core /usr/local/bin/mandau-agent
-                CP_STATUS=$?
-                set -e
-                if [ $CP_STATUS -ne 0 ]; then
-                    print_error "Both install and cp commands failed"
-                    cd - >/dev/null
-                    rm -rf "$TEMP_DIR"
-                    exit 1
-                fi
-            fi
-        elif [ "$EUID" -eq 0 ]; then
-            # Running as root (e.g., via curl | sudo bash), install directly
-            set +e
-            install -m 755 mandau mandau-core mandau-agent /usr/local/bin/
-            INSTALL_STATUS=$?
-            set -e
-            if [ $INSTALL_STATUS -ne 0 ]; then
-                # Fallback to cp if install command fails
-                print_warning "install command failed, trying cp as fallback..."
-                set +e
-                cp mandau mandau-core mandau-agent /usr/local/bin/
-                chmod 755 /usr/local/bin/mandau /usr/local/bin/mandau-core /usr/local/bin/mandau-agent
-                CP_STATUS=$?
-                set -e
-                if [ $CP_STATUS -ne 0 ]; then
-                    print_error "Both install and cp commands failed"
-                    cd - >/dev/null
-                    rm -rf "$TEMP_DIR"
-                    exit 1
-                fi
-            fi
-        else
-            # Try to install without sudo (might fail)
-            set +e
-            install -m 755 mandau mandau-core mandau-agent /usr/local/bin/ 2>/dev/null
-            INSTALL_STATUS=$?
-            set -e
-            if [ $INSTALL_STATUS -ne 0 ]; then
-                # Fallback to cp if install command fails
-                print_warning "install command failed, trying cp as fallback..."
-                if [ -n "$SUDO" ]; then
-                    set +e
-                    $SUDO cp mandau mandau-core mandau-agent /usr/local/bin/
-                    $SUDO chmod 755 /usr/local/bin/mandau /usr/local/bin/mandau-core /usr/local/bin/mandau-agent
-                    CP_STATUS=$?
-                    set -e
-                    if [ $CP_STATUS -ne 0 ]; then
-                        print_error "Both install and cp commands failed"
-                        cd - >/dev/null
-                        rm -rf "$TEMP_DIR"
-                        exit 1
-                    fi
-                else
-                    set +e
-                    cp mandau mandau-core mandau-agent /usr/local/bin/ 2>/dev/null
-                    CP_STATUS=$?
-                    set -e
-                    if [ $CP_STATUS -ne 0 ]; then
-                        print_error "Installation to /usr/local/bin requires sudo. Please run with sudo or install manually."
-                        cd - >/dev/null
-                        rm -rf "$TEMP_DIR"
-                        exit 1
-                    fi
-                fi
-            fi
+        
+        if ! command -v docker &> /dev/null; then
+            print_warning "Docker not found. Mandau Core/Agent may require Docker to function properly."
         fi
     else
-        # Windows: Copy to a user-accessible location
-        # This is a simplified approach - Windows installation would need more work
-        print_warning "Windows installation requires manual copying of .exe files to PATH"
-        print_status "Binaries extracted to: $TEMP_DIR"
+        HAS_SYSTEMD=false
     fi
 
-    print_success "Mandau binaries installed successfully!"
-
-    # Determine the original user (in case running with sudo)
-    if [ -n "$SUDO_USER" ]; then
+    # Determine original user (for sudo context)
+    if [ "${SUDO_USER:-}" != "" ]; then
         ORIGINAL_USER="$SUDO_USER"
     else
         ORIGINAL_USER="$(whoami)"
     fi
+    ORIGINAL_HOME=$(eval echo "~$ORIGINAL_USER")
 
-    # Get the home directory for the original user
-    ORIGINAL_HOME=$(eval echo ~$ORIGINAL_USER)
-
-    # Generate certificates in the standard location
-    generate_certificates "$ORIGINAL_HOME/.mandau/certs" "$ORIGINAL_USER"
-
-    # Create default configuration with profile support
-    create_default_config "$ORIGINAL_USER" "$ORIGINAL_HOME"
-
-    # Create systemd service files with absolute paths
-    create_systemd_services "$ORIGINAL_USER" "$ORIGINAL_HOME"
-
-    # Create stacks directory for agent
-    mkdir -p "$ORIGINAL_HOME/mandau-stacks"
-    chown "$ORIGINAL_USER:$ORIGINAL_USER" "$ORIGINAL_HOME/mandau-stacks"
-    chmod 755 "$ORIGINAL_HOME/mandau-stacks"
-
-    # Ensure proper ownership of all Mandau files
-    print_status "Setting file permissions..."
-    chown -R "$ORIGINAL_USER:$ORIGINAL_USER" "$ORIGINAL_HOME/.mandau/" 2>/dev/null || true
-
-    # Start and enable systemd services automatically
-    print_status "Starting Mandau services..."
-    if command -v systemctl >/dev/null 2>&1; then
-        # Enable services to start on boot
-        $SUDO systemctl enable mandau-core 2>/dev/null || true
-        $SUDO systemctl enable mandau-agent 2>/dev/null || true
-
-        # Start core service
-        if $SUDO systemctl start mandau-core 2>/dev/null; then
-            print_success "Mandau Core service started"
-        else
-            print_warning "Core service failed to start, check logs with: journalctl -u mandau-core"
-        fi
-
-        # Start agent service
-        if $SUDO systemctl start mandau-agent 2>/dev/null; then
-            print_success "Mandau Agent service started"
-        else
-            print_warning "Agent service failed to start, check logs with: journalctl -u mandau-agent"
-        fi
-
-        # Wait a moment and check service status
-        sleep 2
-        core_status=$($SUDO systemctl is-active mandau-core 2>/dev/null || echo "unknown")
-        if [ "$core_status" = "active" ]; then
-            print_success "✓ Mandau Core is running and healthy!"
-        else
-            print_warning "⚠ Mandau Core may have issues. Check logs:"
-            print_status "  sudo journalctl -u mandau-core --no-pager -n 20"
-        fi
-    fi
-
-    print_success "Mandau installation completed successfully!"
-    print_status "Certificates are in ~/.mandau/certs/ (standard location)"
-    print_status "Configuration is in ~/.mandau/ with profile support"
-    print_status "Stacks directory created at ~/mandau-stacks/"
-    print_status "Systemd services created and enabled with absolute paths"
-    print_status "Default core port: ${MANDAU_CORE_PORT:-9443}"
-
-    # Return to original directory and cleanup
-    cd - >/dev/null
-    rm -rf "$TEMP_DIR"
+    print_success "Pre-flight checks passed (User: $ORIGINAL_USER, Home: $ORIGINAL_HOME)"
 }
 
-# Main execution
-main() {
-    print_status "Starting Mandau installation with enhanced configuration..."
+# Fetch latest version
+get_latest_version() {
+    print_step "Fetching Version Info"
+    
+    if [ "${MANDAU_VERSION:-}" != "" ]; then
+        LATEST_VERSION="$MANDAU_VERSION"
+        print_info "Using manually specified version: $LATEST_VERSION"
+        return 0
+    fi
 
-    # Detect platform
-    detect_platform
+    LATEST_VERSION=$(curl -sL "https://api.github.com/repos/bhangun/mandau/releases/latest" \
+        -H "Accept: application/vnd.github.v3+json" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
-    # Get latest version
-    get_latest_version
+    if [ -z "$LATEST_VERSION" ]; then
+        print_error "Failed to fetch latest version from GitHub."
+        exit 1
+    fi
 
-    # Download and install
-    download_and_install "$LATEST_VERSION" "$OS" "$ARCH"
+    print_success "Latest version: $LATEST_VERSION"
+}
 
-    # Verify installation
-    if command -v mandau >/dev/null 2>&1; then
-        print_success "Mandau CLI is available: $(mandau --version 2>/dev/null || echo "version info not available")"
+# Download and Extract
+download_binaries() {
+    print_step "Downloading Binaries"
+    
+    local version_no_v="${LATEST_VERSION#v}"
+    local filename="mandau-${OS}-${ARCH}-${version_no_v}.tar.gz"
+    local url="https://github.com/bhangun/mandau/releases/download/${LATEST_VERSION}/${filename}"
+    
+    # Special case for Windows would go here if needed, keeping it Unix-centric for now
+    
+    TEMP_DIR=$(mktemp -d)
+    print_info "Downloading $url..."
+    
+    if ! curl -fsSL -o "$TEMP_DIR/$filename" "$url"; then
+        print_error "Download failed."
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+
+    print_info "Extracting..."
+    tar -xzf "$TEMP_DIR/$filename" -C "$TEMP_DIR"
+    
+    # Ensure binaries are executable
+    chmod +x "$TEMP_DIR"/mandau* 2>/dev/null || true
+    
+    # Return temp dir path
+    echo "$TEMP_DIR"
+}
+
+# Install Binaries
+install_binaries() {
+    local source_dir="$1"
+    print_step "Installing Binaries"
+
+    local install_dir="/usr/local/bin"
+    local binaries=("mandau" "mandau-core" "mandau-agent")
+    
+    SUDO_CMD=""
+    if [ "$EUID" -ne 0 ] && command -v sudo &>/dev/null; then
+        SUDO_CMD="sudo"
+    fi
+
+    for bin in "${binaries[@]}"; do
+        if [ -f "$source_dir/$bin" ]; then
+            print_info "Installing $bin to $install_dir..."
+            $SUDO_CMD install -m 755 "$source_dir/$bin" "$install_dir/$bin"
+        else
+            print_warning "Binary $bin not found in package, skipping."
+        fi
+    done
+
+    print_success "Binaries installed to $install_dir"
+}
+
+# Setup Directories and Certificates
+setup_environment() {
+    print_step "Setting up Environment"
+    
+    local config_dir="$ORIGINAL_HOME/.mandau"
+    local cert_dir="$config_dir/certs"
+    local stacks_dir="$ORIGINAL_HOME/mandau-stacks"
+
+    # Create directories with proper ownership
+    mkdir -p "$config_dir" "$cert_dir" "$stacks_dir"
+    chown -R "$ORIGINAL_USER:$ORIGINAL_USER" "$config_dir" "$stacks_dir"
+    chmod 700 "$config_dir" "$cert_dir"
+
+    # Generate certificates if they don't exist
+    if [ ! -f "$cert_dir/ca.crt" ]; then
+        print_info "Generating self-signed certificates in $cert_dir..."
+        
+        # CA
+        openssl genrsa -out "$cert_dir/ca.key" 4096
+        openssl req -new -x509 -days 3650 -key "$cert_dir/ca.key" -out "$cert_dir/ca.crt" \
+            -subj "/CN=Mandau Root CA/O=Mandau/C=ID" -nodes
+
+        # Helper for cert generation
+        generate_cert() {
+            local name=$1
+            local cn=$2
+            local ext_content=$3
+            
+            openssl genrsa -out "$cert_dir/$name.key" 4096
+            openssl req -new -key "$cert_dir/$name.key" -out "$cert_dir/$name.csr" \
+                -subj "/CN=$cn/O=Mandau/C=ID" -nodes
+            
+            echo "$ext_content" > "$cert_dir/$name.ext"
+            
+            openssl x509 -req -in "$cert_dir/$name.csr" -CA "$cert_dir/ca.crt" -CAkey "$cert_dir/ca.key" \
+                -CAcreateserial -out "$cert_dir/$name.crt" -days 365 -extfile "$cert_dir/$name.ext"
+            
+            rm "$cert_dir/$name.csr" "$cert_dir/$name.ext"
+        }
+
+        generate_cert "core" "mandau-core" "subjectAltName=DNS:localhost,IP:127.0.0.1"
+        generate_cert "agent" "mandau-agent" "subjectAltName=DNS:localhost,IP:127.0.0.1"
+        generate_cert "client" "mandau-cli" "extendedKeyUsage=clientAuth"
+
+        # Final permissions
+        chmod 600 "$cert_dir"/*.key
+        chmod 644 "$cert_dir"/*.crt
+        chown -R "$ORIGINAL_USER:$ORIGINAL_USER" "$cert_dir"
+        print_success "Certificates generated successfully."
     else
-        print_warning "Mandau CLI not found in PATH after installation"
-        print_status "Checking if binaries exist in /usr/local/bin/:"
-        if [ -f "/usr/local/bin/mandau" ]; then
-            print_status "  - mandau binary exists in /usr/local/bin/"
-            ls -la /usr/local/bin/mandau 2>/dev/null || echo "  - Cannot access /usr/local/bin/mandau"
+        print_info "Certificates already exist in $cert_dir, skipping generation."
+    fi
+
+    # Create default config
+    local core_port="${MANDAU_CORE_PORT:-3443}"
+    if [ ! -f "$config_dir/config.yaml" ]; then
+        cat > "$config_dir/config.yaml" <<EOF
+server:
+  listen_addr: "localhost:${core_port}"
+  tls:
+    cert_path: "$cert_dir/client.crt"
+    key_path: "$cert_dir/client.key"
+    ca_path: "$cert_dir/ca.crt"
+    server_name: "mandau-core"
+EOF
+        chown "$ORIGINAL_USER:$ORIGINAL_USER" "$config_dir/config.yaml"
+        chmod 600 "$config_dir/config.yaml"
+        print_success "Default configuration created."
+    fi
+}
+
+# Create Systemd Services
+configure_services() {
+    if [ "$HAS_SYSTEMD" != "true" ]; then return 0; fi
+    
+    print_step "Configuring Systemd Services"
+    local core_port="${MANDAU_CORE_PORT:-3443}"
+    local SUDO_CMD=""
+    if [ "$EUID" -ne 0 ]; then SUDO_CMD="sudo"; fi
+
+    # Mandau Core Service
+    cat <<EOF | $SUDO_CMD tee /etc/systemd/system/mandau-core.service >/dev/null
+[Unit]
+Description=Mandau Core Service
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=$ORIGINAL_USER
+Group=$ORIGINAL_USER
+WorkingDirectory=$ORIGINAL_HOME
+ExecStart=/usr/local/bin/mandau-core \\
+    -listen :${core_port} \\
+    -cert $ORIGINAL_HOME/.mandau/certs/core.crt \\
+    -key $ORIGINAL_HOME/.mandau/certs/core.key \\
+    -ca $ORIGINAL_HOME/.mandau/certs/ca.crt
+Restart=always
+RestartSec=5
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=$ORIGINAL_HOME/.mandau $ORIGINAL_HOME/mandau-stacks /tmp
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Mandau Agent Service
+    cat <<EOF | $SUDO_CMD tee /etc/systemd/system/mandau-agent.service >/dev/null
+[Unit]
+Description=Mandau Agent Service
+After=network.target mandau-core.service docker.service
+Wants=mandau-core.service docker.service
+
+[Service]
+Type=simple
+User=$ORIGINAL_USER
+Group=$ORIGINAL_USER
+WorkingDirectory=$ORIGINAL_HOME
+ExecStart=/usr/local/bin/mandau-agent \\
+    -server localhost:${core_port} \\
+    -cert $ORIGINAL_HOME/.mandau/certs/agent.crt \\
+    -key $ORIGINAL_HOME/.mandau/certs/agent.key \\
+    -ca $ORIGINAL_HOME/.mandau/certs/ca.crt \\
+    -stack-root $ORIGINAL_HOME/mandau-stacks
+Restart=always
+RestartSec=5
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=$ORIGINAL_HOME/.mandau $ORIGINAL_HOME/mandau-stacks /var/run/docker.sock /tmp
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Reload and enable
+    $SUDO_CMD chmod 644 /etc/systemd/system/mandau-*.service
+    $SUDO_CMD systemctl daemon-reload
+    print_success "Systemd services configured."
+    
+    print_info "Starting services..."
+    $SUDO_CMD systemctl enable mandau-core mandau-agent 2>/dev/null || true
+    $SUDO_CMD systemctl restart mandau-core
+    $SUDO_CMD systemctl restart mandau-agent
+}
+
+# Main function
+main() {
+    local client_only=false
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --client) client_only=true; shift ;;
+            *) shift ;;
+        esac
+    done
+
+    echo -e "${BLUE}╔═══════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║${NC}  ${GREEN}Mandau Installation Script${NC}                          ${BLUE}║${NC}"
+    echo -e "${BLUE}╚═══════════════════════════════════════════════════════╝${NC}"
+
+    detect_platform
+    preflight_checks
+    
+    if [ "$OS" == "linux" ]; then
+        if ! command -v docker &> /dev/null; then
+            print_warning "Docker is NOT installed. Mandau Agent requires Docker to manage containers."
+            print_info "Install Docker: https://docs.docker.com/engine/install/"
         else
-            print_status "  - mandau binary does NOT exist in /usr/local/bin/"
-        fi
-        if [ -f "/usr/local/bin/mandau-core" ]; then
-            print_status "  - mandau-core binary exists in /usr/local/bin/"
-        else
-            print_status "  - mandau-core binary does NOT exist in /usr/local/bin/"
-        fi
-        if [ -f "/usr/local/bin/mandau-agent" ]; then
-            print_status "  - mandau-agent binary exists in /usr/local/bin/"
-        else
-            print_status "  - mandau-agent binary does NOT exist in /usr/local/bin/"
+            print_success "Docker detected ($(docker --version))"
         fi
     fi
 
-    print_status "Installation complete! Run 'mandau --help' to get started."
-    print_status "For development: Use MANDAU_PROFILE=dev to use development configuration"
-    print_status "For systemd services: Run 'sudo systemctl enable mandau-core mandau-agent' and 'sudo systemctl start mandau-core'"
-    print_status "Environment variables for customization:"
-    print_status "  MANDAU_CORE_PORT=${MANDAU_CORE_PORT:-9443}"
-    print_status "  MANDAU_CA_CERT=${MANDAU_CA_CERT:-<not set>}"
-    print_status "  MANDAU_CA_KEY=${MANDAU_CA_KEY:-<not set>}"
+    get_latest_version
+    
+    TEMP_DIR=$(download_binaries)
+    
+    if [ "$client_only" == "true" ]; then
+        print_info "Client-only mode requested. Installing only the Mandau CLI."
+        local install_dir="/usr/local/bin"
+        local SUDO_CMD=""
+        if [ "$EUID" -ne 0 ] && command -v sudo &>/dev/null; then SUDO_CMD="sudo"; fi
+        $SUDO_CMD install -m 755 "$TEMP_DIR/mandau" "$install_dir/mandau"
+        print_success "Mandau CLI installed."
+    else
+        install_binaries "$TEMP_DIR"
+        setup_environment
+        configure_services
+        
+        # Service Health Check
+        print_step "Verifying Services"
+        if [ "$HAS_SYSTEMD" == "true" ]; then
+            sleep 2
+            if systemctl is-active --quiet mandau-core; then
+                print_success "Mandau Core is running."
+            else
+                print_error "Mandau Core failed to start. Check: journalctl -u mandau-core"
+            fi
+            
+            if systemctl is-active --quiet mandau-agent; then
+                print_success "Mandau Agent is running."
+            else
+                print_error "Mandau Agent failed to start. Check: journalctl -u mandau-agent"
+            fi
+        fi
+    fi
+    
+    rm -rf "$TEMP_DIR"
+
+    print_step "Installation Summary"
+    if [ "$client_only" == "true" ]; then
+        print_success "Mandau CLI $LATEST_VERSION has been installed!"
+        echo -e "  - ${BLUE}CLI:${NC}         /usr/local/bin/mandau"
+        echo ""
+        print_info "Next steps for client setup:"
+        print_info "1. Run 'mandau connect <server-ip>'"
+        print_info "2. Sync certificates as instructed by the connect command."
+    else
+        print_success "Mandau $LATEST_VERSION (Server & Agent) has been installed!"
+        echo ""
+        echo -e "  - ${BLUE}CLI:${NC}         /usr/local/bin/mandau"
+        echo -e "  - ${BLUE}Config:${NC}      $ORIGINAL_HOME/.mandau/config.yaml"
+        echo -e "  - ${BLUE}Stacks:${NC}      $ORIGINAL_HOME/mandau-stacks/"
+        echo ""
+        if [ "$HAS_SYSTEMD" == "true" ]; then
+            print_info "To check status: sudo systemctl status mandau-core mandau-agent"
+            print_info "To view logs:   journalctl -u mandau-agent -f"
+        fi
+    fi
+    echo ""
+    print_info "Run 'mandau --help' to get started."
+    print_success "Done!"
 }
 
-# Run main function
 main "$@"

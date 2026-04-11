@@ -428,7 +428,7 @@ deploy_cli() {
         cat > '$REMOTE_CERT_DIR/config.yaml' <<EOCONFIG
 # Mandau CLI Configuration
 server:
-  listen_addr: \"$REMOTE_HOST:9443\"
+  listen_addr: \"$REMOTE_HOST:3443\"
   tls:
     cert_path: \"$REMOTE_CERT_DIR/client.crt\"
     key_path: \"$REMOTE_CERT_DIR/client.key\"
@@ -499,7 +499,7 @@ print_deployment_summary() {
         echo "│ 2. Update firewall to allow agent connections           │"
     elif [[ "$DEPLOY_TYPE" == "agent" ]]; then
         echo "│ 1. Start agent:                                         │"
-        echo "│    mandau-agent --server <CORE_IP>:9443 \\             │"
+        echo "│    mandau-agent --server <CORE_IP>:3443 \\             │"
         echo "│      --cert $REMOTE_CERT_DIR/agent.crt \\              │"
         echo "│      --key $REMOTE_CERT_DIR/agent.key \\               │"
         echo "│      --ca $REMOTE_CERT_DIR/ca.crt                      │"

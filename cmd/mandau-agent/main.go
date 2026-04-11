@@ -365,7 +365,7 @@ func NewAgent(cfg *Config) (*Agent, error) {
 	// Create managers
 	opMgr := operation.NewManager(opQueue)
 	stackMgr := stack.NewManager(cfg.StackRoot, docker, opMgr)
-	containerMgr := container.NewManager()
+	containerMgr := container.NewManager(docker)
 	fsMgr := filesystem.NewManager()
 
 	// Create gRPC connection to core server
@@ -1129,6 +1129,38 @@ func (a *Agent) GetStackLogs(req *agentv1.GetStackLogsRequest, stream agentv1.St
 	}
 
 	return nil
+}
+
+func (a *Agent) ListContainers(ctx context.Context, req *agentv1.ListContainersRequest) (*agentv1.ListContainersResponse, error) {
+	containers, err := a.containerMgr.ListContainers(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list containers: %v", err)
+	}
+
+	return &agentv1.ListContainersResponse{
+		Containers: containers,
+	}, nil
+}
+
+func (a *Agent) ExecuteDockerCommand(req *agentv1.DockerCommandRequest, stream agentv1.ContainerService_ExecuteDockerCommandServer) error {
+	exitCode, err := a.containerMgr.ExecuteDockerCommand(stream.Context(), req.Args, func(output []byte) error {
+		return stream.Send(&agentv1.DockerCommandResponse{
+			Output: output,
+		})
+	})
+
+	if err != nil {
+		// Even if there's an error, we try to send the final status
+		_ = stream.Send(&agentv1.DockerCommandResponse{
+			Error:    err.Error(),
+			ExitCode: exitCode,
+		})
+		return err
+	}
+
+	return stream.Send(&agentv1.DockerCommandResponse{
+		ExitCode: exitCode,
+	})
 }
 
 func healthStatus(err error) string {

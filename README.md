@@ -216,6 +216,11 @@ Invoke-WebRequest -Uri "https://github.com/bhangun/mandau/releases/latest/downlo
 bash install.sh
 ```
 
+**Client-Only (CLI only):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/bhangun/mandau/main/scripts/install.sh | bash -s -- --client
+```
+
 This will:
 - ✅ Auto-detect your OS and architecture
 - ✅ Download the latest release binaries
@@ -249,6 +254,26 @@ After installing Mandau, you need to set up certificates. The installation autom
 - Deploy `mandau-core` and `mandau-agent` binaries to your servers
 - Configure certificates for server authentication
 - Set up agents on each Docker host to be managed
+
+#### Smart Connection Setup (Pro Tip)
+
+Mandau now streamlines remote connectivity with the `connect` command:
+
+1. **Point to your server:**
+   ```bash
+   mandau connect <server-ip>
+   ```
+
+2. **Sync certificates (Manual):**
+   The `connect` command will provide a tailored `scp` command. Usually:
+   ```bash
+   scp <USER>@<SERVER_IP>:~/.mandau/certs/{ca.crt,client.crt,client.key} ~/.mandau/certs/
+   ```
+
+3. **Verify:**
+   ```bash
+   mandau agent list
+   ```
 
 #### Client Configuration for Remote Server
 
@@ -504,13 +529,12 @@ export MANDAU_CA=~/mandau-certs/ca.crt
 mandau agent list
 
 # Deploy a stack
-mandau stack apply agent-001 web ./compose.yaml
+mandau stack apply web ./compose.yaml
 
-# Stream logs
-mandau stack logs agent-001 web
-
-# Execute command in container
-mandau container exec agent-001 web-container /bin/sh
+# Run Docker commands globally (Automatically proxied)
+mandau docker ps
+mandau docker logs -f my-container
+mandau docker images
 
 # Manage services
 mandau services nginx create-proxy agent-001 example.com http://localhost:3000 80

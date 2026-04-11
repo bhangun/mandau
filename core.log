@@ -1,5 +1,10 @@
-2025/12/23 17:30:49 Loaded configuration from config/core/config.yaml
-Starting Mandau Core on :8443...
-2025/12/23 17:30:49 Loaded configuration from config/core/config.yaml
-2025/12/23 17:30:49 Unknown plugin: file-audit
-Core listening on :8443
+2026/04/11 10:50:51 Loaded configuration from /Users/bhangun/.mandau/config.yaml
+Starting Mandau Core on :9444...
+2026/04/11 10:50:51 Loaded configuration from config/core/config.yaml
+2026/04/11 10:50:51 File audit plugin not implemented in this build
+Core listening on :9444
+2026/04/11 10:50:51 WebSocket server starting on :8445
+2026/04/11 10:50:51 Loaded JWT secret from /Users/bhangun/.mandau/jwt.secret
+2026/04/11 10:50:51 Loaded admin password from /Users/bhangun/.mandau/admin.password
+2026/04/11 10:50:51 Web dashboard starting on :8080 (auth enabled, user: admin)
+2026/04/11 10:50:54 Agent registered: ID=agent-aba.local, Hostname=aba.local

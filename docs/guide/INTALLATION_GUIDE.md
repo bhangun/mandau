@@ -50,7 +50,7 @@
 
   1. Generate Certificates
 
-  ⚠️ IMPORTANT: Default port is now **9443** (changed from 8443). Update all configurations accordingly.
+  ⚠️ IMPORTANT: Default port is now **3443** (changed from 8443). Update all configurations accordingly.
 
   Mandau uses mTLS (mutual TLS) for secure communication. The certificate workflow depends on your deployment type:
 
@@ -90,7 +90,7 @@
   Start Core Service:
 
    1 mandau-core \
-   2   --listen :9443 \
+   2   --listen :3443 \
    3   --cert ~/mandau-certs/core.crt \
    4   --key ~/mandau-certs/core.key \
    5   --ca ~/mandau-certs/ca.crt
@@ -104,7 +104,7 @@
   Start Agent Service:
 
    1 mandau-agent \
-   2   --server localhost:9443 \
+   2   --server localhost:3443 \
    3   --cert ~/mandau-certs/agent.crt \
    4   --key ~/mandau-certs/agent.key \
    5   --ca ~/mandau-certs/ca.crt \
@@ -116,7 +116,7 @@
 
   Option A: Using Environment Variables
 
-   1 export MANDAU_SERVER=localhost:9443
+   1 export MANDAU_SERVER=localhost:3443
    2 export MANDAU_CERT=~/mandau-certs/client.crt
    3 export MANDAU_KEY=~/mandau-certs/client.key
    4 export MANDAU_CA=~/mandau-certs/ca.crt
@@ -124,14 +124,14 @@
   Option B: Using Command-Line Flags
 
    1 mandau --cert ~/mandau-certs/client.crt --key ~/mandau-certs/client.key --ca ~/mandau-certs/ca.crt \
-   2   --server localhost:9443 [command]
+   2   --server localhost:3443 [command]
 
   Core Configuration
 
   Configuration File
   Create a configuration file at ~/.config/mandau/config.yaml:
 
-   1 server: "localhost:9443"
+   1 server: "localhost:3443"
    2 cert: "~/mandau-certs/client.crt"
    3 key: "~/mandau-certs/client.key"
    4 ca: "~/mandau-certs/ca.crt"

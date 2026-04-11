@@ -11,10 +11,11 @@ import (
 
 // CoreConfig represents the configuration for the core server
 type CoreConfig struct {
-	Server           ServerConfig           `yaml:"server"`
-	Plugins          PluginConfig           `yaml:"plugins"`
-	AgentManagement  AgentManagementConfig  `yaml:"agent_management"`
-	PluginDir        string                 `yaml:"plugin_dir"`
+	Server          ServerConfig          `yaml:"server"`
+	Plugins         PluginConfig          `yaml:"plugins"`
+	AgentManagement AgentManagementConfig `yaml:"agent_management"`
+	PluginDir       string                `yaml:"plugin_dir"`
+	DefaultAgent    string                `yaml:"default_agent"`
 }
 
 // AgentConfig represents the configuration for the agent
@@ -64,21 +65,21 @@ type DockerConfig struct {
 
 // StacksConfig contains stack-related configuration
 type StacksConfig struct {
-	RootDir                  string `yaml:"root_dir"`
-	MaxConcurrentOperations  int    `yaml:"max_concurrent_operations"`
+	RootDir                 string `yaml:"root_dir"`
+	MaxConcurrentOperations int    `yaml:"max_concurrent_operations"`
 }
 
 // PluginConfig contains plugin-related configuration
 type PluginConfig struct {
-	Enabled map[string]bool                `yaml:"enabled"`
+	Enabled map[string]bool                   `yaml:"enabled"`
 	Configs map[string]map[string]interface{} `yaml:"configs,omitempty"`
 }
 
 // SecurityConfig contains security-related configuration
 type SecurityConfig struct {
-	ExecTimeout         string `yaml:"exec_timeout"`
-	LogRetention        string `yaml:"log_retention"`
-	TerminalRecording   bool   `yaml:"terminal_recording"`
+	ExecTimeout       string `yaml:"exec_timeout"`
+	LogRetention      string `yaml:"log_retention"`
+	TerminalRecording bool   `yaml:"terminal_recording"`
 }
 
 // AgentManagementConfig contains agent management configuration
@@ -123,6 +124,16 @@ func LoadCoreConfig(configPath string) (*CoreConfig, error) {
 	config.Server.TLS.CAPath = expandPath(config.Server.TLS.CAPath)
 
 	return &config, nil
+}
+
+// SaveCoreConfig saves the core configuration to a YAML file
+func SaveCoreConfig(configPath string, config *CoreConfig) error {
+	data, err := yaml.Marshal(config)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, data, 0600)
 }
 
 // LoadAgentConfig loads the agent configuration from a YAML file
@@ -202,7 +213,7 @@ users:
 
 	return &CoreConfig{
 		Server: ServerConfig{
-			ListenAddr: ":9443",
+			ListenAddr: ":3443",
 			TLS: TLSConfig{
 				CertPath:   "~/.mandau/certs/core.crt",
 				KeyPath:    "~/.mandau/certs/core.key",
@@ -278,7 +289,7 @@ users:
 			},
 		},
 		ServerConnection: ServerConnectionConfig{
-			CoreAddr: "localhost:9443",
+			CoreAddr: "localhost:3443",
 			TLS: TLSConfig{
 				CertPath:   "~/.mandau/certs/agent.crt",
 				KeyPath:    "~/.mandau/certs/agent.key",

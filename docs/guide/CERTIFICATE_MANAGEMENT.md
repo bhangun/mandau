@@ -473,7 +473,7 @@ ssh admin@core-server "openssl x509 -in /etc/mandau/certs/core.crt -noout -dates
 ```bash
 # Test core server connection
 openssl s_client \
-  -connect core-server:9443 \
+  -connect core-server:3443 \
   -cert client.crt \
   -key client.key \
   -CAfile ca.crt
@@ -570,7 +570,7 @@ export MANDAU_CA=~/.mandau/ca.crt
 
 **Symptoms:**
 ```
-dial tcp 192.168.1.100:9443: connect: connection refused
+dial tcp 192.168.1.100:3443: connect: connection refused
 ```
 
 **Check:**
@@ -582,10 +582,10 @@ ssh admin@core-server "sudo systemctl status mandau-core"
 ssh admin@core-server "sudo journalctl -u mandau-core -n 50"
 
 # Verify firewall allows connections
-ssh admin@core-server "sudo iptables -L -n | grep 9443"
+ssh admin@core-server "sudo iptables -L -n | grep 3443"
 
 # Test port connectivity
-nc -zv core-server 9443
+nc -zv core-server 3443
 ```
 
 ### Certificate Hostname Mismatch
@@ -775,6 +775,6 @@ openssl x509 -in core.crt -text -noout
 
 | Component | Default Port | Protocol |
 |-----------|-------------|----------|
-| Core Server | `9443` | gRPC + HTTP (Web Dashboard) |
+| Core Server | `3443` | gRPC + HTTP (Web Dashboard) |
 | Agent Server | `9444` | gRPC |
 | WebSocket | `8445` | WebSocket |

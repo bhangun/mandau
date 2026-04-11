@@ -100,11 +100,11 @@ Expand-Archive -Path $outputPath -DestinationPath "$env:TEMP\mandau"
    docker-compose ps
    ```
 
-**Note:** Default port is now **9443** (not 8443). Update your CLI configuration accordingly.
+**Note:** Default port is now **3443** (not 8443). Update your CLI configuration accordingly.
 
 ### Option 3: Host Installation (Production)
 
-**⚠️ Important:** Default port is now **9443** (not 8443). See [Certificate Management Guide](CERTIFICATE_MANAGEMENT.md) for production certificate setup.
+**⚠️ Important:** Default port is now **3443** (not 8443). See [Certificate Management Guide](CERTIFICATE_MANAGEMENT.md) for production certificate setup.
 
 1. **Clone the repository:**
    ```bash
@@ -208,7 +208,7 @@ mandau agent list
 
 **Option 2: Using environment variables**
 ```bash
-export MANDAU_SERVER=localhost:9443
+export MANDAU_SERVER=localhost:3443
 export MANDAU_CERT=~/.mandau/certs/client.crt
 export MANDAU_KEY=~/.mandau/certs/client.key
 export MANDAU_CA=~/.mandau/certs/ca.crt
@@ -216,14 +216,14 @@ export MANDAU_CA=~/.mandau/certs/ca.crt
 
 **Option 3: Using command-line flags**
 ```bash
-mandau --server localhost:9443 \
+mandau --server localhost:3443 \
   --cert ~/.mandau/certs/client.crt \
   --key ~/.mandau/certs/client.key \
   --ca ~/.mandau/certs/ca.crt \
   agent list
 ```
 
-**⚠️ Port Change:** The default core server port has been changed from **8443** to **9443**. Update your configurations accordingly.
+**⚠️ Port Change:** The default core server port has been changed from **8443** to **3443**. Update your configurations accordingly.
 
 ### List Agents
 
@@ -396,7 +396,7 @@ openssl verify -CAfile /etc/mandau/certs/ca.crt \
   ```
 - Check what's using the port:
   ```bash
-  lsof -i :9443  # Core server
+  lsof -i :3443  # Core server
   lsof -i :9444  # Agent server
   ```
 

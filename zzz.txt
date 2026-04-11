@@ -1,0 +1,15 @@
+[Unit]
+Description=Mandau Agent Service
+After=network.target mandau-core.service
+Wants=mandau-core.service
+
+[Service]
+Type=simple
+User=bhangun
+Group=bhangun
+ExecStart=/usr/local/bin/mandau-agent -server localhost:3443 -cert /home/bhangun/.mandau/certs/agent.crt -key /home/bhangun/.mandau/certs/agent.key -ca /home/bhangun/.mandau/certs/ca.crt -stack-root /home/bhangun/mandau-stacks
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
