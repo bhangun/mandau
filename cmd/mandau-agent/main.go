@@ -178,8 +178,7 @@ func main() {
 	cfg := parseFlags(filteredArgs)
 
 	// Apply configuration file values as defaults, but allow command-line overrides
-	if agentConfig.Server.ListenAddr != "" && cfg.ListenAddr == ":8444" {
-		// Only use config file value if the default was used (not overridden by CLI)
+	if cfg.ListenAddr == ":8444" && agentConfig.Server.ListenAddr != "" {
 		cfg.ListenAddr = agentConfig.Server.ListenAddr
 	}
 	if agentConfig.Server.TLS.CertPath != "" {
@@ -193,12 +192,11 @@ func main() {
 	}
 
 	// Use server connection config for core server address if available
-	// Only use config file value if the default was used (not overridden by CLI)
-	if agentConfig.ServerConnection.CoreAddr != "" && cfg.ServerAddr == "localhost:8443" {
+	if cfg.ServerAddr == "localhost:8443" && agentConfig.ServerConnection.CoreAddr != "" {
 		cfg.ServerAddr = agentConfig.ServerConnection.CoreAddr
 	}
 
-	if agentConfig.Stacks.RootDir != "" {
+	if cfg.StackRoot == "/var/lib/mandau/stacks" && agentConfig.Stacks.RootDir != "" {
 		cfg.StackRoot = expandTildePath(agentConfig.Stacks.RootDir)
 	}
 	if agentConfig.Agent.Labels != nil {
@@ -268,7 +266,7 @@ func parseFlags(configArgs []string) *Config {
 	flagSet.StringVar(&cfg.CertPath, "cert", "/etc/mandau/agent.crt", "Certificate path")
 	flagSet.StringVar(&cfg.KeyPath, "key", "/etc/mandau/agent.key", "Key path")
 	flagSet.StringVar(&cfg.CAPath, "ca", "/etc/mandau/ca.crt", "CA certificate path")
-	flagSet.StringVar(&cfg.StackRoot, "stack-root", "/var/lib/mandau/stacks", "Stack root directory")
+	flagSet.StringVar(&cfg.StackRoot, "stack-root", "./stacks", "Stack root directory")
 	flagSet.StringVar(&cfg.PluginDir, "plugin-dir", "/usr/lib/mandau/plugins", "Plugin directory")
 
 	// Parse the filtered arguments
@@ -291,18 +289,18 @@ func parseFlags(configArgs []string) *Config {
 	// Use provided agent ID, or load from persistent storage, or generate new one
 	if cfg.AgentID == "" {
 		// Try to load persistent agent ID from file
-		persistentID := loadPersistentAgentID()
+		persistentID := loadPersistentAgentID(cfg.StackRoot)
 		if persistentID != "" {
 			cfg.AgentID = persistentID
 		} else {
 			// Generate new agent ID based on hostname
 			cfg.AgentID = fmt.Sprintf("agent-%s", hostname)
 			// Save the new ID for persistence
-			savePersistentAgentID(cfg.AgentID)
+			savePersistentAgentID(cfg.AgentID, cfg.StackRoot)
 		}
 	} else {
 		// If agent ID is provided via CLI, save it for persistence
-		savePersistentAgentID(cfg.AgentID)
+		savePersistentAgentID(cfg.AgentID, cfg.StackRoot)
 	}
 
 	return cfg
@@ -1225,9 +1223,9 @@ func loadPluginsFromDir(registry *plugin.Registry, dir string, pluginConfig conf
 }
 
 // loadPersistentAgentID loads the agent ID from a persistent file
-func loadPersistentAgentID() string {
+func loadPersistentAgentID(stackRoot string) string {
 	// Try to read agent ID from a persistent file
-	idFile := getAgentIDFilePath()
+	idFile := getAgentIDFilePath(stackRoot)
 	if _, err := os.Stat(idFile); os.IsNotExist(err) {
 		return "" // File doesn't exist yet
 	}
@@ -1247,8 +1245,8 @@ func loadPersistentAgentID() string {
 }
 
 // savePersistentAgentID saves the agent ID to a persistent file
-func savePersistentAgentID(id string) {
-	idFile := getAgentIDFilePath()
+func savePersistentAgentID(id string, stackRoot string) {
+	idFile := getAgentIDFilePath(stackRoot)
 
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(idFile)
@@ -1263,9 +1261,7 @@ func savePersistentAgentID(id string) {
 }
 
 // getAgentIDFilePath returns the path to the agent ID file
-func getAgentIDFilePath() string {
-	// Use the stack root directory to store the agent ID
-	stackRoot := "./stacks" // Default from config - we'll get this from agent config
+func getAgentIDFilePath(stackRoot string) string {
 	if _, err := os.Stat(stackRoot); os.IsNotExist(err) {
 		// Create stacks directory if it doesn't exist
 		os.MkdirAll(stackRoot, 0755)
