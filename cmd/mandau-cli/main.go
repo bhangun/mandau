@@ -124,7 +124,7 @@ func main() {
 		RunE:  cli.listUsers,
 	})
 
-	rootCmd.AddCommand(authCmd)
+	rootCmd.AddCommand(authCmd, applyCmd, fsCmd, shellCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -295,7 +295,9 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 
 	creds := credentials.NewTLS(tlsConfig)
 
-	conn, err := grpc.Dial(serverAddr, grpc.WithTransportCredentials(creds))
+	conn, err := grpc.Dial(serverAddr, 
+		grpc.WithTransportCredentials(creds),
+	)
 	if err != nil {
 		errStr := err.Error()
 		if strings.Contains(errStr, "x509") || strings.Contains(errStr, "authentication handshake failed") {

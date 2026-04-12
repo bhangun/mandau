@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"strconv"
+	"text/tabwriter"
 
+	agentv1 "github.com/bhangun/mandau/api/v1"
 	"github.com/spf13/cobra"
 )
 
@@ -27,6 +32,20 @@ func init() {
 		Short: "List virtual hosts",
 		Args:  cobra.ExactArgs(1),
 		RunE:  listVirtualHosts,
+	})
+
+	nginxCmd.AddCommand(&cobra.Command{
+		Use:   "delete [agent] [name]",
+		Short: "Delete a virtual host",
+		Args:  cobra.ExactArgs(2),
+		RunE:  deleteVirtualHost,
+	})
+
+	nginxCmd.AddCommand(&cobra.Command{
+		Use:   "reload [agent]",
+		Short: "Reload Nginx configuration",
+		Args:  cobra.ExactArgs(1),
+		RunE:  reloadNginx,
 	})
 
 	// Systemd commands
@@ -244,12 +263,30 @@ func (c *CLI) createReverseProxy(cmd *cobra.Command, args []string) error {
 	agentID := args[0]
 	domain := args[1]
 	upstream := args[2]
-	port := args[3]
+	portStr := args[3]
 
-	// Call the agent service to create the reverse proxy via nginx plugin
-	// This would require an API endpoint in the agent service
-	fmt.Printf("Creating reverse proxy on agent %s for %s -> %s (port %s)\n", agentID, domain, upstream, port)
-	fmt.Println("Note: This would call the nginx plugin in the actual implementation")
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return fmt.Errorf("invalid port: %w", err)
+	}
+
+	fmt.Printf("Creating reverse proxy on agent %s for %s -> %s (port %d)...\n", agentID, domain, upstream, port)
+
+	resp, err := c.coreClient.CreateNginxProxy(context.Background(), &agentv1.CreateNginxProxyRequest{
+		AgentId:  agentID,
+		Domain:   domain,
+		Upstream: upstream,
+		Port:     int32(port),
+	})
+	if err != nil {
+		return err
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("failed: %s", resp.Message)
+	}
+
+	fmt.Println("✓ Reverse proxy created and enabled successfully")
 	return nil
 }
 
@@ -259,9 +296,72 @@ func createReverseProxy(cmd *cobra.Command, args []string) error {
 
 func (c *CLI) listVirtualHosts(cmd *cobra.Command, args []string) error {
 	agentID := args[0]
-	fmt.Printf("Listing virtual hosts on agent %s\n", agentID)
-	fmt.Println("Note: This would call the nginx plugin in the actual implementation")
+	fmt.Printf("Listing virtual hosts on agent %s:\n\n", agentID)
+
+	resp, err := c.coreClient.ListNginxSites(context.Background(), &agentv1.ListNginxSitesRequest{
+		AgentId: agentID,
+	})
+	if err != nil {
+		return err
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	fmt.Fprintln(w, "SITE NAME\tSERVER NAME\tPORT\tUPSTREAM\tENABLED")
+	for _, site := range resp.Sites {
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%v\n", site.Name, site.ServerName, site.Port, site.Upstream, site.Enabled)
+	}
+	w.Flush()
 	return nil
+}
+
+func (c *CLI) deleteVirtualHost(cmd *cobra.Command, args []string) error {
+	agentID := args[0]
+	name := args[1]
+
+	fmt.Printf("Deleting virtual host %s on agent %s...\n", name, agentID)
+
+	resp, err := c.coreClient.DeleteNginxSite(context.Background(), &agentv1.DeleteNginxSiteRequest{
+		AgentId: agentID,
+		Name:    name,
+	})
+	if err != nil {
+		return err
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("failed to delete site")
+	}
+
+	fmt.Println("✓ Virtual host deleted")
+	return nil
+}
+
+func deleteVirtualHost(cmd *cobra.Command, args []string) error {
+	return cli.deleteVirtualHost(cmd, args)
+}
+
+func (c *CLI) reloadNginx(cmd *cobra.Command, args []string) error {
+	agentID := args[0]
+
+	fmt.Printf("Reloading Nginx on agent %s...\n", agentID)
+
+	resp, err := c.coreClient.ReloadNginx(context.Background(), &agentv1.ReloadNginxRequest{
+		AgentId: agentID,
+	})
+	if err != nil {
+		return err
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("reload failed: %s", resp.Error)
+	}
+
+	fmt.Println("✓ Nginx reloaded successfully")
+	return nil
+}
+
+func reloadNginx(cmd *cobra.Command, args []string) error {
+	return cli.reloadNginx(cmd, args)
 }
 
 func listVirtualHosts(cmd *cobra.Command, args []string) error {

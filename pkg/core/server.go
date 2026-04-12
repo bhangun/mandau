@@ -244,8 +244,8 @@ func (c *Core) Serve() error {
 			Timeout: 10 * time.Second, // Wait 10s for response
 		}),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             10 * time.Second, // Allow client pings as frequent as 10s
-			PermitWithoutStream: true,             // Allow pings even with no active streams
+			MinTime:             100 * time.Millisecond, 
+			PermitWithoutStream: true,
 		}),
 	)
 
@@ -1017,4 +1017,159 @@ func (c *Core) ExecuteDockerCommand(req *agentv1.DockerCommandRequest, stream ag
 	}
 
 	return nil
+}
+
+// Nginx Proxy Methods
+func (c *Core) ListNginxSites(ctx context.Context, req *agentv1.ListNginxSitesRequest) (*agentv1.ListNginxSitesResponse, error) {
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	client := agentv1.NewNginxServiceClient(conn.Client)
+	return client.ListSites(ctx, req)
+}
+
+func (c *Core) CreateNginxProxy(ctx context.Context, req *agentv1.CreateNginxProxyRequest) (*agentv1.CreateNginxProxyResponse, error) {
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	client := agentv1.NewNginxServiceClient(conn.Client)
+	return client.CreateProxy(ctx, req)
+}
+
+func (c *Core) DeleteNginxSite(ctx context.Context, req *agentv1.DeleteNginxSiteRequest) (*agentv1.DeleteNginxSiteResponse, error) {
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	client := agentv1.NewNginxServiceClient(conn.Client)
+	return client.DeleteSite(ctx, req)
+}
+
+func (c *Core) ReloadNginx(ctx context.Context, req *agentv1.ReloadNginxRequest) (*agentv1.ReloadNginxResponse, error) {
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	client := agentv1.NewNginxServiceClient(conn.Client)
+	return client.Reload(ctx, req)
+}
+func (c *Core) ListFiles(ctx context.Context, req *agentv1.ListFilesRequest) (*agentv1.ListFilesResponse, error) {
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	client := agentv1.NewFilesystemServiceClient(conn.Client)
+	return client.ListFiles(ctx, req)
+}
+
+func (c *Core) ReadFile(ctx context.Context, req *agentv1.ReadFileRequest) (*agentv1.ReadFileResponse, error) {
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	client := agentv1.NewFilesystemServiceClient(conn.Client)
+	return client.ReadFile(ctx, req)
+}
+
+func (c *Core) WriteFile(ctx context.Context, req *agentv1.WriteFileRequest) (*agentv1.WriteFileResponse, error) {
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	client := agentv1.NewFilesystemServiceClient(conn.Client)
+	return client.WriteFile(ctx, req)
+}
+
+func (c *Core) DeleteFile(ctx context.Context, req *agentv1.DeleteFileRequest) (*agentv1.DeleteFileResponse, error) {
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	client := agentv1.NewFilesystemServiceClient(conn.Client)
+	return client.DeleteFile(ctx, req)
+}
+
+func (c *Core) CreateDirectory(ctx context.Context, req *agentv1.CreateDirectoryRequest) (*agentv1.CreateDirectoryResponse, error) {
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	client := agentv1.NewFilesystemServiceClient(conn.Client)
+	return client.CreateDirectory(ctx, req)
+}
+
+func (c *Core) MoveFile(ctx context.Context, req *agentv1.MoveFileRequest) (*agentv1.MoveFileResponse, error) {
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	client := agentv1.NewFilesystemServiceClient(conn.Client)
+	return client.MoveFile(ctx, req)
+}
+
+func (c *Core) CopyFile(ctx context.Context, req *agentv1.CopyFileRequest) (*agentv1.CopyFileResponse, error) {
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	client := agentv1.NewFilesystemServiceClient(conn.Client)
+	return client.CopyFile(ctx, req)
+}
+
+func (c *Core) HostShell(stream agentv1.CoreService_HostShellServer) error {
+	// First message contains agent ID
+	req, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+
+	conn, err := c.getAgentConnection(req.AgentId)
+	if err != nil {
+		return err
+	}
+
+	client := agentv1.NewHostEnvironmentServiceClient(conn.Client)
+	ctx := stream.Context()
+	agentStream, err := client.HostShell(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Send initial req
+	if err := agentStream.Send(req); err != nil {
+		return err
+	}
+
+	errChan := make(chan error, 1)
+
+	// Forward client -> agent
+	go func() {
+		for {
+			req, err := stream.Recv()
+			if err != nil {
+				errChan <- err
+				return
+			}
+			if err := agentStream.Send(req); err != nil {
+				errChan <- err
+				return
+			}
+		}
+	}()
+
+	// Forward agent -> client
+	for {
+		resp, err := agentStream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if err := stream.Send(resp); err != nil {
+			return err
+		}
+	}
 }

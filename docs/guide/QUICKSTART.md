@@ -244,7 +244,10 @@ services:
       - "80:80"
 EOF
 
-# Apply to agent
+# Apply to agent (Smart naming: uses directory name 'my-app')
+mandau apply my-app/docker-compose.yaml
+
+# Or specify a stack name explicitly (old way)
 mandau stack apply agent-001 mystack mystack.yaml
 ```
 
@@ -274,12 +277,63 @@ mandau container start agent-001 mystack-web-1
 mandau container stop agent-001 mystack-web-1
 ```
 
+### Filesystem Management
+
+```bash
+# List files on agent
+mandau fs ls /var/log
+
+# Copy from remote to local
+mandau fs fetch /var/log/syslog ./local-syslog
+
+# Copy from local to remote
+mandau fs cp ./config.yaml /etc/myapp/config.yaml
+
+# View text file
+mandau fs cat /etc/hosts
+```
+
+### Interactive Host Shell
+
+Open a fully interactive shell session on a remote agent — just like SSH, but secured through Mandau's mTLS infrastructure:
+
+```bash
+# Open shell on default agent
+mandau shell
+
+# Open shell on a specific agent
+mandau shell agent-insanserver
+```
+
+Once connected, you have a full bash session. Use `exit` or `Ctrl+D` to disconnect.
+
+> **Security Note:** Host shell access can be disabled per-agent by setting `disable_host_shell: true` in the agent's `security` config section.
+
+### Stack Deployment
+
+```bash
+# Deploy a compose file (defaults to 'up -d')
+mandau apply my-stack.yaml
+
+# Deploy with explicit daemon mode
+mandau apply my-stack.yaml up -d
+
+# Bring a stack down
+mandau apply my-stack.yaml down
+
+# Deploy to a specific agent
+mandau -a agent-002 apply my-stack.yaml
+```
+
+The `.env` file adjacent to your compose file is automatically uploaded to the agent.
+
 ### Service Management
 
 ```bash
 # Nginx management
-mandau services nginx create-proxy agent-001 example.com http://localhost:3000 80
 mandau services nginx list agent-001
+mandau services nginx create-proxy agent-001 example.com http://localhost:3000 80
+mandau services nginx reload agent-001
 
 # Systemd service management
 mandau services systemd start agent-001 myservice
@@ -303,9 +357,8 @@ mandau services cron list agent-001
 mandau services environment info agent-001
 mandau services environment install agent-001 nginx
 
-# DNS management
-mandau services dns create-zone agent-001 example.com
-mandau services dns add-a agent-001 example.com www 192.168.1.100
+# DNS management (Pending)
+# mandau services dns create-zone agent-001 example.com
 ```
 
 ### Plugin Management

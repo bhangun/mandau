@@ -80,6 +80,7 @@ type SecurityConfig struct {
 	ExecTimeout       string `yaml:"exec_timeout"`
 	LogRetention      string `yaml:"log_retention"`
 	TerminalRecording bool   `yaml:"terminal_recording"`
+	DisableHostShell  bool   `yaml:"disable_host_shell"`
 }
 
 // AgentManagementConfig contains agent management configuration

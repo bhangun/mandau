@@ -7,7 +7,14 @@ import (
 var composeCmd = &cobra.Command{
 	Use:   "compose",
 	Short: "Docker Compose command wrapper",
-	Long:  "Run Docker Compose commands on a remote agent. Use 'mandau compose ps', 'mandau compose up -d', etc.",
+	Long: `Run Docker Compose commands on a remote agent. 
+Use 'mandau compose ps', 'mandau compose up -d', etc.
+
+💡 NOTE: This command is a passthrough to the remote host. 
+If you have a local docker-compose.yaml file you want to deploy, 
+use 'mandau stack apply' instead:
+
+  mandau stack apply [agent] [stack-name] [local-compose-file]`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return cmd.Help()

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bhangun/mandau/pkg/agent/operation"
+	"github.com/bhangun/mandau/pkg/agent/utils"
 	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/moby/moby/client"
@@ -250,7 +251,7 @@ func (m *Manager) ApplyStack(ctx context.Context, req *ApplyStackRequest) (strin
 		return "", fmt.Errorf("write compose file: %w", err)
 	}
 
-	// Write env file if provided
+	// Write env file if provided (legacy map support)
 	if len(req.EnvVars) > 0 {
 		envPath := filepath.Join(stackPath, ".env")
 		envContent := ""
@@ -258,7 +259,15 @@ func (m *Manager) ApplyStack(ctx context.Context, req *ApplyStackRequest) (strin
 			envContent += fmt.Sprintf("%s=%s\n", k, v)
 		}
 		if err := os.WriteFile(envPath, []byte(envContent), 0644); err != nil {
-			return "", fmt.Errorf("write env file: %w", err)
+			return "", fmt.Errorf("write map env file: %w", err)
+		}
+	}
+
+	// Write raw env file content if provided (overrides map)
+	if req.EnvContent != "" {
+		envPath := filepath.Join(stackPath, ".env")
+		if err := os.WriteFile(envPath, []byte(req.EnvContent), 0644); err != nil {
+			return "", fmt.Errorf("write raw env file: %w", err)
 		}
 	}
 
@@ -300,15 +309,26 @@ func (m *Manager) executeApply(ctx context.Context, opID string, req *ApplyStack
 	// Use docker compose CLI via exec (compose-go doesn't support full lifecycle)
 	// In production, this would use the compose API or reimplemented logic
 	// Use relative path from stack root directory
+	// Use dynamic compose command
+	base := utils.GetComposeCommand(ctx)
 	relativeComposePath := filepath.Join(req.StackName, "compose.yaml")
-	cmd := []string{"docker", "compose", "-f", relativeComposePath, "up", "-d"}
+	// Support custom arguments (e.g. "down", "up -d --no-deps")
+	var cmd []string
+	if len(req.CustomArgs) > 0 {
+		// Use exact custom args provided by the user
+		cmd = append(base, "-f", relativeComposePath)
+		cmd = append(cmd, req.CustomArgs...)
+	} else {
+		// Default behavior
+		cmd = append(base, "-f", relativeComposePath, "up", "-d")
+		
+		if req.ForceRecreate {
+			cmd = append(cmd, "--force-recreate")
+		}
 
-	if req.ForceRecreate {
-		cmd = append(cmd, "--force-recreate")
-	}
-
-	if len(req.Services) > 0 {
-		cmd = append(cmd, req.Services...)
+		if len(req.Services) > 0 {
+			cmd = append(cmd, req.Services...)
+		}
 	}
 
 	// Execute command (simplified - production would stream output)
@@ -451,8 +471,10 @@ func (m *Manager) executeRemove(ctx context.Context, opID, stackName, stackPath 
 	m.opMgr.EmitEvent(opID, "Stopping containers...")
 
 	// Execute docker compose down
+	// Use dynamic compose command
+	base := utils.GetComposeCommand(ctx)
 	relativeComposePath := filepath.Join(stackName, "compose.yaml")
-	cmd := []string{"docker", "compose", "-f", relativeComposePath, "down"}
+	cmd := append(base, "-f", relativeComposePath, "down")
 	if removeVolumes {
 		cmd = append(cmd, "--volumes")
 	}
@@ -495,6 +517,8 @@ type ApplyStackRequest struct {
 	ForceRecreate  bool
 	Services       []string
 	PullImages     bool
+	EnvContent     string
+	CustomArgs     []string
 }
 
 type DiffResult struct {

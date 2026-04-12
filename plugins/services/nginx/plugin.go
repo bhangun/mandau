@@ -112,7 +112,7 @@ func (p *NginxPlugin) CreateVirtualHost(vhost *VirtualHost) error {
 	}
 
 	// Test configuration
-	if err := p.testConfig(); err != nil {
+	if err := p.TestConfig(); err != nil {
 		os.Remove(configPath)
 		return fmt.Errorf("invalid config: %w", err)
 	}
@@ -138,7 +138,7 @@ func (p *NginxPlugin) EnableVirtualHost(serverName string) error {
 	}
 
 	if p.config.AutoReload {
-		return p.reload()
+		return p.Reload()
 	}
 
 	return nil
@@ -153,7 +153,7 @@ func (p *NginxPlugin) DisableVirtualHost(serverName string) error {
 	}
 
 	if p.config.AutoReload {
-		return p.reload()
+		return p.Reload()
 	}
 
 	return nil
@@ -173,20 +173,48 @@ func (p *NginxPlugin) DeleteVirtualHost(serverName string) error {
 	return nil
 }
 
-func (p *NginxPlugin) testConfig() error {
-	cmd := exec.Command("sh", "-c", p.config.TestCommand)
-	output, err := cmd.CombinedOutput()
+// ListVirtualHosts lists all available virtual hosts
+func (p *NginxPlugin) ListVirtualHosts() ([]*VirtualHost, error) {
+	files, err := os.ReadDir(p.config.AvailableDir)
 	if err != nil {
-		return fmt.Errorf("test failed: %s", output)
+		return nil, fmt.Errorf("read available dir: %w", err)
 	}
-	return nil
+
+	var hosts []*VirtualHost
+	for _, f := range files {
+		if f.IsDir() {
+			continue
+		}
+		name := f.Name()
+		// Remove .conf extension if present
+		serverName := name
+		if filepath.Ext(name) == ".conf" {
+			serverName = name[:len(name)-len(".conf")]
+		}
+
+		hosts = append(hosts, &VirtualHost{
+			ServerName: serverName,
+			// For now, we don't parse the detailed config
+		})
+	}
+
+	return hosts, nil
 }
 
-func (p *NginxPlugin) reload() error {
+func (p *NginxPlugin) Reload() error {
 	cmd := exec.Command("sh", "-c", p.config.ReloadCommand)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("reload failed: %s", output)
+	}
+	return nil
+}
+
+func (p *NginxPlugin) TestConfig() error {
+	cmd := exec.Command("sh", "-c", p.config.TestCommand)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("test failed: %s", output)
 	}
 	return nil
 }
@@ -237,7 +265,7 @@ func (p *NginxPlugin) CreateLoadBalancer(name string, backends []string, algorit
 	}
 
 	if p.config.AutoReload {
-		return p.reload()
+		return p.Reload()
 	}
 
 	return nil

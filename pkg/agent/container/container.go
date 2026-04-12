@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	agentv1 "github.com/bhangun/mandau/api/v1"
+	"github.com/bhangun/mandau/pkg/agent/utils"
 	"github.com/moby/moby/client"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -65,8 +66,16 @@ func (m *Manager) ListContainers(ctx context.Context) ([]*agentv1.Container, err
 
 // ExecuteDockerCommand executes a docker command on the host
 func (m *Manager) ExecuteDockerCommand(ctx context.Context, args []string, onOutput func([]byte) error) (int32, error) {
-	// We use the docker CLI directly for generic command wrapping
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	// Check if this is a compose command
+	var cmd *exec.Cmd
+	if len(args) > 0 && args[0] == "compose" {
+		base := utils.GetComposeCommand(ctx)
+		// args[1:] is the rest of the command (e.g. ps, up, etc.)
+		fullArgs := append(base[1:], args[1:]...)
+		cmd = exec.CommandContext(ctx, base[0], fullArgs...)
+	} else {
+		cmd = exec.CommandContext(ctx, "docker", args...)
+	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

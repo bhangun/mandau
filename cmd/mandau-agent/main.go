@@ -25,6 +25,7 @@ import (
 	"github.com/bhangun/mandau/pkg/plugin"
 	"github.com/bhangun/mandau/pkg/utils"
 	"github.com/bhangun/mandau/plugins/auth/rbac"
+	"github.com/bhangun/mandau/plugins/services/nginx"
 	"github.com/moby/moby/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -50,6 +51,8 @@ type Agent struct {
 	agentv1.UnimplementedContainerServiceServer
 	agentv1.UnimplementedFilesystemServiceServer
 	agentv1.UnimplementedOperationsServiceServer
+	agentv1.UnimplementedNginxServiceServer
+	agentv1.UnimplementedHostEnvironmentServiceServer
 
 	config       *Config
 	serverConn   *grpc.ClientConn
@@ -59,6 +62,7 @@ type Agent struct {
 	stackMgr     *stack.Manager
 	containerMgr *container.Manager
 	fsMgr        *filesystem.Manager
+	nginxPlugin  *nginx.NginxPlugin
 }
 
 type Config struct {
@@ -366,12 +370,24 @@ func NewAgent(cfg *Config) (*Agent, error) {
 	opMgr := operation.NewManager(opQueue)
 	stackMgr := stack.NewManager(cfg.StackRoot, docker, opMgr)
 	containerMgr := container.NewManager(docker)
-	fsMgr := filesystem.NewManager()
+	fsMgr := filesystem.NewManager(cfg.StackRoot)
 
 	// Create gRPC connection to core server
 	serverConn, err := createServerConnection(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create server connection: %w", err)
+	}
+
+	// Create Nginx plugin
+	nginxPlugin := nginx.New()
+	nginxConfig := map[string]interface{}{}
+	if cfg.FullConfig != nil {
+		if c, ok := cfg.FullConfig.Plugins.Configs["nginx"]; ok {
+			nginxConfig = c
+		}
+	}
+	if err := nginxPlugin.Init(ctx, nginxConfig); err != nil {
+		fmt.Printf("Warning: nginx plugin init failed: %v\n", err)
 	}
 
 	agent := &Agent{
@@ -383,6 +399,7 @@ func NewAgent(cfg *Config) (*Agent, error) {
 		stackMgr:     stackMgr,
 		containerMgr: containerMgr,
 		fsMgr:        fsMgr,
+		nginxPlugin:  nginxPlugin,
 	}
 
 	// Register with core server
@@ -439,8 +456,8 @@ func createServerConnection(cfg *Config) (*grpc.ClientConn, error) {
 		}),
 		// Add keepalive to detect broken connections
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                10 * time.Second,
-			Timeout:             5 * time.Second,
+			Time:                20 * time.Second,
+			Timeout:             10 * time.Second,
 			PermitWithoutStream: true,
 		}),
 	)
@@ -613,6 +630,8 @@ func (a *Agent) Serve() error {
 	agentv1.RegisterContainerServiceServer(server, a)
 	agentv1.RegisterFilesystemServiceServer(server, a)
 	agentv1.RegisterOperationsServiceServer(server, a)
+	agentv1.RegisterNginxServiceServer(server, a)
+	agentv1.RegisterHostEnvironmentServiceServer(server, a)
 
 	// Listen
 	lis, err := net.Listen("tcp", a.config.ListenAddr)
@@ -985,6 +1004,8 @@ func (a *Agent) ApplyStack(req *agentv1.ApplyStackRequest, stream agentv1.StackS
 		ForceRecreate:  req.ForceRecreate,
 		Services:       req.Services,
 		PullImages:     req.PullImages,
+		EnvContent:     req.EnvContent,
+		CustomArgs:     req.CustomArgs,
 	}
 
 	opID, err := a.stackMgr.ApplyStack(ctx, internalReq)
@@ -1163,6 +1184,68 @@ func (a *Agent) ExecuteDockerCommand(req *agentv1.DockerCommandRequest, stream a
 	})
 }
 
+// Nginx Service Implementation
+func (a *Agent) ListSites(ctx context.Context, req *agentv1.ListNginxSitesRequest) (*agentv1.ListNginxSitesResponse, error) {
+	hosts, err := a.nginxPlugin.ListVirtualHosts()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list sites: %v", err)
+	}
+
+	sites := make([]*agentv1.NginxSite, len(hosts))
+	for i, h := range hosts {
+		sites[i] = &agentv1.NginxSite{
+			Name:       h.ServerName,
+			ServerName: h.ServerName,
+			Enabled:    true, // Simplified for now
+		}
+	}
+
+	return &agentv1.ListNginxSitesResponse{Sites: sites}, nil
+}
+
+func (a *Agent) CreateProxy(ctx context.Context, req *agentv1.CreateNginxProxyRequest) (*agentv1.CreateNginxProxyResponse, error) {
+	err := a.nginxPlugin.CreateReverseProxy(req.Domain, req.Upstream, int(req.Port))
+	if err != nil {
+		return &agentv1.CreateNginxProxyResponse{
+			Success: false,
+			Message: err.Error(),
+		}, nil
+	}
+
+	// Also enable it
+	if err := a.nginxPlugin.EnableVirtualHost(req.Domain); err != nil {
+		return &agentv1.CreateNginxProxyResponse{
+			Success: false,
+			Message: fmt.Sprintf("proxy created but failed to enable: %v", err),
+		}, nil
+	}
+
+	return &agentv1.CreateNginxProxyResponse{
+		Success: true,
+		Message: "Successfully created and enabled reverse proxy",
+	}, nil
+}
+
+func (a *Agent) DeleteSite(ctx context.Context, req *agentv1.DeleteNginxSiteRequest) (*agentv1.DeleteNginxSiteResponse, error) {
+	err := a.nginxPlugin.DeleteVirtualHost(req.Name)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "delete site: %v", err)
+	}
+
+	return &agentv1.DeleteNginxSiteResponse{Success: true}, nil
+}
+
+func (a *Agent) Reload(ctx context.Context, req *agentv1.ReloadNginxRequest) (*agentv1.ReloadNginxResponse, error) {
+	if err := a.nginxPlugin.Reload(); err != nil {
+		return &agentv1.ReloadNginxResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
+	}
+
+	return &agentv1.ReloadNginxResponse{Success: true}, nil
+}
+
 func healthStatus(err error) string {
 	if err != nil {
 		return "unhealthy"
@@ -1299,4 +1382,60 @@ func getAgentIDFilePath(stackRoot string) string {
 		os.MkdirAll(stackRoot, 0755)
 	}
 	return filepath.Join(stackRoot, ".agent_id")
+}
+// Filesystem Service Implementation
+func (a *Agent) ListFiles(ctx context.Context, req *agentv1.ListFilesRequest) (*agentv1.ListFilesResponse, error) {
+	files, err := a.fsMgr.ListFiles(ctx, req.StackName, req.Path)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list files: %v", err)
+	}
+	return &agentv1.ListFilesResponse{Files: files}, nil
+}
+
+func (a *Agent) ReadFile(ctx context.Context, req *agentv1.ReadFileRequest) (*agentv1.ReadFileResponse, error) {
+	data, info, err := a.fsMgr.ReadFile(ctx, req.StackName, req.Path)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "read file: %v", err)
+	}
+	return &agentv1.ReadFileResponse{Content: data, Info: info}, nil
+}
+
+func (a *Agent) WriteFile(ctx context.Context, req *agentv1.WriteFileRequest) (*agentv1.WriteFileResponse, error) {
+	err := a.fsMgr.WriteFile(ctx, req.StackName, req.Path, req.Content, req.Mode)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "write file: %v", err)
+	}
+	return &agentv1.WriteFileResponse{}, nil
+}
+
+func (a *Agent) DeleteFile(ctx context.Context, req *agentv1.DeleteFileRequest) (*agentv1.DeleteFileResponse, error) {
+	err := a.fsMgr.DeleteFile(ctx, req.StackName, req.Path, req.Recursive)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "delete file: %v", err)
+	}
+	return &agentv1.DeleteFileResponse{}, nil
+}
+
+func (a *Agent) CreateDirectory(ctx context.Context, req *agentv1.CreateDirectoryRequest) (*agentv1.CreateDirectoryResponse, error) {
+	err := a.fsMgr.CreateDirectory(ctx, req.StackName, req.Path)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "create directory: %v", err)
+	}
+	return &agentv1.CreateDirectoryResponse{}, nil
+}
+
+func (a *Agent) MoveFile(ctx context.Context, req *agentv1.MoveFileRequest) (*agentv1.MoveFileResponse, error) {
+	err := a.fsMgr.MoveFile(ctx, req.StackName, req.SourcePath, req.DestPath)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "move file: %v", err)
+	}
+	return &agentv1.MoveFileResponse{}, nil
+}
+
+func (a *Agent) CopyFile(ctx context.Context, req *agentv1.CopyFileRequest) (*agentv1.CopyFileResponse, error) {
+	err := a.fsMgr.CopyFile(ctx, req.StackName, req.SourcePath, req.DestPath)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "copy file: %v", err)
+	}
+	return &agentv1.CopyFileResponse{}, nil
 }

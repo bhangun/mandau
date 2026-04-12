@@ -14,6 +14,23 @@ service CoreService {
   // Container proxy services
   rpc ListContainers(ListContainersRequest) returns (ListContainersResponse);
   rpc ExecuteDockerCommand(DockerCommandRequest) returns (stream DockerCommandResponse);
+  // Nginx proxy services
+  rpc ListNginxSites(ListNginxSitesRequest) returns (ListNginxSitesResponse);
+  rpc CreateNginxProxy(CreateNginxProxyRequest) returns (CreateNginxProxyResponse);
+  rpc DeleteNginxSite(DeleteNginxSiteRequest) returns (DeleteNginxSiteResponse);
+  rpc ReloadNginx(ReloadNginxRequest) returns (ReloadNginxResponse);
+
+  // Filesystem proxy services
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+  rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
+  rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc CreateDirectory(CreateDirectoryRequest) returns (CreateDirectoryResponse);
+  rpc MoveFile(MoveFileRequest) returns (MoveFileResponse);
+  rpc CopyFile(CopyFileRequest) returns (CopyFileResponse);
+
+  // Host Shell service
+  rpc HostShell(stream HostShellRequest) returns (stream HostShellResponse);
 }
 
 message ListAgentsRequest {}
@@ -40,7 +57,7 @@ service AgentService {
 message RegisterRequest {
   string hostname = 1;
   string version = 2;
-  string agent_id = 5; // Optional persistent agent ID
+  string agent_id = 5; 
   map<string, string> labels = 3;
   repeated string capabilities = 4;
 }
@@ -88,6 +105,8 @@ message ApplyStackRequest {
   bool force_recreate = 5;
   repeated string services = 6;
   bool pull_images = 7;
+  string env_content = 8;
+  repeated string custom_args = 9;
 }
 
 message DiffStackRequest {
@@ -116,15 +135,13 @@ enum DiffAction {
 // Container Management Service
 service ContainerService {
   rpc ListContainers(ListContainersRequest) returns (ListContainersResponse);
-  rpc InspectContainer(InspectContainerRequest)
-      returns (InspectContainerResponse);
+  rpc InspectContainer(InspectContainerRequest) returns (InspectContainerResponse);
   rpc StreamLogs(StreamLogsRequest) returns (stream LogEntry);
   rpc Exec(stream ExecRequest) returns (stream ExecResponse);
   rpc GetStats(GetStatsRequest) returns (stream ContainerStats);
   rpc StartContainer(StartContainerRequest) returns (StartContainerResponse);
   rpc StopContainer(StopContainerRequest) returns (StopContainerResponse);
-  rpc RestartContainer(RestartContainerRequest)
-      returns (RestartContainerResponse);
+  rpc RestartContainer(RestartContainerRequest) returns (RestartContainerResponse);
   rpc ExecuteDockerCommand(DockerCommandRequest) returns (stream DockerCommandResponse);
 }
 
@@ -179,7 +196,7 @@ message ExecResponse {
 
 message LogEntry {
   google.protobuf.Timestamp timestamp = 1;
-  string stream = 2; // stdout or stderr
+  string stream = 2;
   bytes content = 3;
   string container_id = 4;
   string service_name = 5;
@@ -194,18 +211,20 @@ message ContainerStats {
   BlockIOStats block_io = 6;
 }
 
-// Filesystem Service
 service FilesystemService {
   rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
   rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
   rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
   rpc CreateDirectory(CreateDirectoryRequest) returns (CreateDirectoryResponse);
+  rpc MoveFile(MoveFileRequest) returns (MoveFileResponse);
+  rpc CopyFile(CopyFileRequest) returns (CopyFileResponse);
 }
 
 message ListFilesRequest {
+  string agent_id = 4;
   string stack_name = 1;
-  string path = 2; // Relative to stack root
+  string path = 2;
 }
 
 message ListFilesResponse { repeated FileInfo files = 1; }
@@ -220,6 +239,7 @@ message FileInfo {
 }
 
 message ReadFileRequest {
+  string agent_id = 4;
   string stack_name = 1;
   string path = 2;
 }
@@ -230,11 +250,49 @@ message ReadFileResponse {
 }
 
 message WriteFileRequest {
+  string agent_id = 5;
   string stack_name = 1;
   string path = 2;
   bytes content = 3;
   uint32 mode = 4;
 }
+
+message WriteFileResponse {}
+
+message DeleteFileRequest {
+  string agent_id = 3;
+  string stack_name = 1;
+  string path = 2;
+  bool recursive = 4;
+}
+
+message DeleteFileResponse {}
+
+message CreateDirectoryRequest {
+  string agent_id = 3;
+  string stack_name = 1;
+  string path = 2;
+}
+
+message CreateDirectoryResponse {}
+
+message MoveFileRequest {
+  string agent_id = 5;
+  string stack_name = 1;
+  string source_path = 2;
+  string dest_path = 3;
+}
+
+message MoveFileResponse {}
+
+message CopyFileRequest {
+  string agent_id = 5;
+  string stack_name = 1;
+  string source_path = 2;
+  string dest_path = 3;
+}
+
+message CopyFileResponse {}
 
 // Operations Service
 service OperationsService {
@@ -272,7 +330,6 @@ message OperationEvent {
   string error = 6;
 }
 
-// Missing messages
 message HeartbeatRequest {
   string agent_id = 1;
   map<string, string> status = 2;
@@ -284,11 +341,8 @@ message HeartbeatResponse {
 }
 
 message CapabilitiesRequest {}
-
 message CapabilitiesResponse { repeated string capabilities = 1; }
-
 message HealthRequest {}
-
 message HealthResponse {
   bool healthy = 1;
   map<string, string> status = 2;
@@ -305,9 +359,7 @@ message GetStackLogsRequest {
   bool follow = 3;
 }
 
-message ListContainersRequest {
-  string agent_id = 1;
-}
+message ListContainersRequest { string agent_id = 1; }
 message ListContainersResponse { repeated Container containers = 1; }
 message InspectContainerRequest { string container_id = 1; }
 message InspectContainerResponse { Container container = 1; }
@@ -331,11 +383,6 @@ message DockerCommandResponse {
   string error = 3;
 }
 
-message WriteFileResponse {}
-message DeleteFileRequest { string path = 1; }
-message DeleteFileResponse {}
-message CreateDirectoryRequest { string path = 1; }
-message CreateDirectoryResponse {}
 
 message GetOperationRequest { string operation_id = 1; }
 message ListOperationsRequest {}
@@ -348,3 +395,325 @@ message CPUStats {}
 message MemoryStats {}
 message NetworkStats {}
 message BlockIOStats {}
+
+// Nginx Service
+service NginxService {
+  rpc ListSites(ListNginxSitesRequest) returns (ListNginxSitesResponse);
+  rpc CreateProxy(CreateNginxProxyRequest) returns (CreateNginxProxyResponse);
+  rpc DeleteSite(DeleteNginxSiteRequest) returns (DeleteNginxSiteResponse);
+  rpc Reload(ReloadNginxRequest) returns (ReloadNginxResponse);
+  
+  // High-level methods from service.proto
+  rpc CreateVirtualHost(CreateVirtualHostRequest) returns (CreateVirtualHostResponse);
+  rpc EnableVirtualHost(EnableVirtualHostRequest) returns (EnableVirtualHostResponse);
+  rpc DisableVirtualHost(DisableVirtualHostRequest) returns (DisableVirtualHostResponse);
+  rpc CreateLoadBalancer(CreateLoadBalancerRequest) returns (CreateLoadBalancerResponse);
+}
+
+message ListNginxSitesRequest { string agent_id = 1; }
+message ListNginxSitesResponse { repeated NginxSite sites = 1; }
+message NginxSite {
+  string name = 1;
+  string server_name = 2;
+  int32 port = 3;
+  string upstream = 4;
+  bool enabled = 5;
+}
+
+message CreateNginxProxyRequest {
+  string agent_id = 1;
+  string domain = 2;
+  string upstream = 3;
+  int32 port = 4;
+}
+
+message CreateNginxProxyResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteNginxSiteRequest {
+  string agent_id = 1;
+  string name = 2;
+}
+
+message DeleteNginxSiteResponse { bool success = 1; }
+
+message ReloadNginxRequest { string agent_id = 1; }
+message ReloadNginxResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+// Additional Nginx messages from service.proto
+message CreateVirtualHostRequest {
+  string agent_id = 1;
+  string server_name = 2;
+  int32 listen = 3;
+  string root = 4;
+  repeated string index = 5;
+  repeated Location locations = 6;
+  SSLConfig ssl = 7;
+  string proxy_pass = 8;
+}
+
+message CreateVirtualHostResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message EnableVirtualHostRequest {
+  string agent_id = 1;
+  string server_name = 2;
+}
+
+message EnableVirtualHostResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message DisableVirtualHostRequest {
+  string agent_id = 1;
+  string server_name = 2;
+}
+
+message DisableVirtualHostResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message Location {
+  string path = 1;
+  string proxy_pass = 2;
+  string root = 3;
+  repeated string try_files = 4;
+  map<string, string> headers = 5;
+}
+
+message SSLConfig {
+  string certificate = 1;
+  string certificate_key = 2;
+  repeated string protocols = 3;
+  string ciphers = 4;
+}
+
+message CreateLoadBalancerRequest {
+  string agent_id = 1;
+  string name = 2;
+  repeated string backends = 3;
+  string algorithm = 4;
+}
+
+message CreateLoadBalancerResponse {
+  string status = 1;
+  string error = 2;
+}
+
+// Systemd Service Management
+service SystemdService {
+  rpc CreateService(CreateServiceRequest) returns (CreateServiceResponse);
+  rpc EnableService(EnableServiceRequest) returns (EnableServiceResponse);
+  rpc DisableService(DisableServiceRequest) returns (DisableServiceResponse);
+  rpc StartService(StartServiceRequest) returns (StartServiceResponse);
+  rpc StopService(StopServiceRequest) returns (StopServiceResponse);
+  rpc RestartService(RestartServiceRequest) returns (RestartServiceResponse);
+  rpc GetServiceStatus(GetServiceStatusRequest) returns (GetServiceStatusResponse);
+  rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
+}
+
+message CreateServiceRequest {
+  string agent_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string after = 4;
+  string type = 5;
+  string user = 6;
+  string group = 7;
+  string working_dir = 8;
+  string exec_start = 9;
+  string exec_stop = 10;
+  map<string, string> environment = 11;
+  string restart = 12;
+  int32 restart_sec = 13;
+  int32 limit_nofile = 14;
+  string memory_limit = 15;
+  bool private_tmp = 16;
+  string protect_system = 17;
+}
+
+message CreateServiceResponse {
+  string status = 1;
+  string error = 2;
+}
+
+message EnableServiceRequest { string agent_id = 1; string name = 2; }
+message EnableServiceResponse { string status = 1; string error = 2; }
+message DisableServiceRequest { string agent_id = 1; string name = 2; }
+message DisableServiceResponse { string status = 1; string error = 2; }
+message StartServiceRequest { string agent_id = 1; string name = 2; }
+message StartServiceResponse { string status = 1; string error = 2; }
+message StopServiceRequest { string agent_id = 1; string name = 2; }
+message StopServiceResponse { string status = 1; string error = 2; }
+message RestartServiceRequest { string agent_id = 1; string name = 2; }
+message RestartServiceResponse { string status = 1; string error = 2; }
+message GetServiceStatusRequest { string agent_id = 1; string name = 2; }
+message GetServiceStatusResponse { string status = 1; string error = 2; }
+message ListServicesRequest { string agent_id = 1; }
+message ListServicesResponse { repeated string services = 1; }
+
+// Firewall Service
+service FirewallService {
+  rpc AddRule(AddFirewallRuleRequest) returns (AddFirewallRuleResponse);
+  rpc DeleteRule(DeleteFirewallRuleRequest) returns (DeleteFirewallRuleResponse);
+  rpc ListRules(ListFirewallRulesRequest) returns (ListFirewallRulesResponse);
+  rpc AllowPort(AllowPortRequest) returns (AllowPortResponse);
+  rpc DenyPort(DenyPortRequest) returns (DenyPortResponse);
+  rpc Enable(EnableFirewallRequest) returns (EnableFirewallResponse);
+  rpc Disable(DisableFirewallRequest) returns (DisableFirewallResponse);
+}
+
+message AddFirewallRuleRequest {
+  string agent_id = 1;
+  string action = 2;
+  string proto = 3;
+  string from_ip = 4;
+  int32 from_port = 5;
+  string to_ip = 6;
+  int32 to_port = 7;
+  string comment = 8;
+}
+
+message AddFirewallRuleResponse { string status = 1; string error = 2; }
+message DeleteFirewallRuleRequest { string agent_id = 1; int32 rule_number = 2; }
+message DeleteFirewallRuleResponse { string status = 1; string error = 2; }
+message ListFirewallRulesRequest { string agent_id = 1; }
+message ListFirewallRulesResponse { repeated string rules = 1; }
+message AllowPortRequest { string agent_id = 1; int32 port = 2; string proto = 3; }
+message AllowPortResponse { string status = 1; string error = 2; }
+message DenyPortRequest { string agent_id = 1; int32 port = 2; string proto = 3; }
+message DenyPortResponse { string status = 1; string error = 2; }
+message EnableFirewallRequest { string agent_id = 1; }
+message EnableFirewallResponse { string status = 1; string error = 2; }
+message DisableFirewallRequest { string agent_id = 1; }
+message DisableFirewallResponse { string status = 1; string error = 2; }
+
+// ACME/SSL Certificate Service
+service ACMEService {
+  rpc ObtainCertificate(ObtainCertificateRequest) returns (ObtainCertificateResponse);
+  rpc RenewCertificate(RenewCertificateRequest) returns (RenewCertificateResponse);
+  rpc RenewAll(RenewAllCertificatesRequest) returns (RenewAllCertificatesResponse);
+  rpc RevokeCertificate(RevokeCertificateRequest) returns (RevokeCertificateResponse);
+  rpc ListCertificates(ListCertificatesRequest) returns (ListCertificatesResponse);
+}
+
+message ObtainCertificateRequest {
+  string agent_id = 1;
+  string domain = 2;
+  string email = 3;
+  bool production = 4;
+}
+
+message ObtainCertificateResponse {
+  Certificate certificate = 1;
+  string error = 2;
+}
+
+message RenewCertificateRequest { string agent_id = 1; string domain = 2; }
+message RenewCertificateResponse { string status = 1; string error = 2; }
+message RenewAllCertificatesRequest { string agent_id = 1; }
+message RenewAllCertificatesResponse { string status = 1; string error = 2; }
+message RevokeCertificateRequest { string agent_id = 1; string domain = 2; }
+message RevokeCertificateResponse { string status = 1; string error = 2; }
+message ListCertificatesRequest { string agent_id = 1; }
+message ListCertificatesResponse { repeated Certificate certificates = 1; }
+
+message Certificate {
+  string domain = 1;
+  string cert_path = 2;
+  string key_path = 3;
+  string expires_at = 4;
+  string issued_at = 5;
+  string issuer = 6;
+}
+
+// Host Environment Service
+service HostEnvironmentService {
+  rpc GetHostInfo(GetHostInfoRequest) returns (GetHostInfoResponse);
+  rpc InstallPackage(InstallPackageRequest) returns (InstallPackageResponse);
+  rpc RemovePackage(RemovePackageRequest) returns (RemovePackageResponse);
+  rpc UpdatePackages(UpdatePackagesRequest) returns (UpdatePackagesResponse);
+  rpc ListPackages(ListPackagesRequest) returns (ListPackagesResponse);
+  rpc SetSysctl(SetSysctlRequest) returns (SetSysctlResponse);
+  rpc GetSysctl(GetSysctlRequest) returns (GetSysctlResponse);
+  
+  // Host Shell
+  rpc HostShell(stream HostShellRequest) returns (stream HostShellResponse);
+}
+
+message GetHostInfoRequest { string agent_id = 1; }
+message GetHostInfoResponse {
+  string hostname = 1;
+  string os = 2;
+  string kernel = 3;
+  string architecture = 4;
+  int32 cpu_cores = 5;
+  int64 memory_mb = 6;
+  int64 disk_gb = 7;
+  string uptime = 8;
+}
+
+message InstallPackageRequest { string agent_id = 1; string package_name = 2; }
+message InstallPackageResponse { string status = 1; string error = 2; }
+message RemovePackageRequest { string agent_id = 1; string package_name = 2; }
+message RemovePackageResponse { string status = 1; string error = 2; }
+message UpdatePackagesRequest { string agent_id = 1; }
+message UpdatePackagesResponse { string status = 1; string error = 2; }
+message ListPackagesRequest { string agent_id = 1; }
+message ListPackagesResponse { repeated string packages = 1; }
+message SetSysctlRequest { string agent_id = 1; string key = 2; string value = 3; }
+message SetSysctlResponse { string status = 1; string error = 2; }
+message GetSysctlRequest { string agent_id = 1; string key = 2; }
+message GetSysctlResponse { string value = 1; string error = 2; }
+
+message HostShellRequest {
+  string agent_id = 1;
+  bytes data = 2;       // Keystrokes
+  int32 term_width = 3; // Window resizing
+  int32 term_height = 4;
+}
+
+message HostShellResponse {
+  bytes data = 1; // Shell output
+  string error = 2;
+}
+
+// ServiceOperationEvent - used for streaming service deployment operations
+message ServiceOperationEvent {
+  string operation_id = 1;
+  string state = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  string message = 4;
+  int32 progress = 5;
+  string error = 6;
+}
+
+// Complete Service Deployment
+service ServiceDeploymentService {
+  rpc DeployWebService(DeployWebServiceRequest) returns (stream ServiceOperationEvent);
+  rpc RemoveWebService(RemoveWebServiceRequest) returns (stream ServiceOperationEvent);
+}
+
+message DeployWebServiceRequest {
+  string agent_id = 1;
+  string name = 2;
+  string description = 3;
+  string domain = 4;
+  int32 port = 5;
+  string command = 6;
+  string working_dir = 7;
+  string user = 8;
+  bool ssl = 9;
+  map<string, string> environment = 10;
+}
+
+message RemoveWebServiceRequest { string agent_id = 1; string name = 2; }
