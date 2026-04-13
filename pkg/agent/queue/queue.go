@@ -103,12 +103,20 @@ func (q *Queue) Dequeue() *Operation {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	// Find the oldest pending operation by CreatedAt
+	var oldest *Operation
 	for _, op := range q.operations {
 		if op.State == StatePending {
-			op.State = StateExecuting
-			q.saveOperation(op)
-			return op
+			if oldest == nil || op.CreatedAt.Before(oldest.CreatedAt) {
+				oldest = op
+			}
 		}
+	}
+
+	if oldest != nil {
+		oldest.State = StateExecuting
+		q.saveOperation(oldest)
+		return oldest
 	}
 
 	return nil

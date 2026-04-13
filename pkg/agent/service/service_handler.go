@@ -70,7 +70,7 @@ func (h *ServicesHandler) CreateVirtualHost(ctx context.Context, req *v1.CreateV
 	}, nil
 }
 
-func (h *ServicesHandler) CreateReverseProxy(ctx context.Context, req *v1.CreateReverseProxyRequest) (*v1.CreateReverseProxyResponse, error) {
+func (h *ServicesHandler) CreateReverseProxy(ctx context.Context, req *v1.CreateNginxProxyRequest) (*v1.CreateNginxProxyResponse, error) {
 	err := h.serviceMgr.Nginx().CreateReverseProxy(
 		req.Domain,
 		req.Upstream,
@@ -81,8 +81,9 @@ func (h *ServicesHandler) CreateReverseProxy(ctx context.Context, req *v1.Create
 		return nil, status.Errorf(codes.Internal, "create reverse proxy: %v", err)
 	}
 
-	return &v1.CreateReverseProxyResponse{
-		Status: "success",
+	return &v1.CreateNginxProxyResponse{
+		Success: true,
+		Message: "success",
 	}, nil
 }
 
