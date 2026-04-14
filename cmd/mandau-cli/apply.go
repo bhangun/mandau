@@ -13,8 +13,8 @@ import (
 )
 
 var applyCmd = &cobra.Command{
-	Use:                "apply [file]",
-	Short:              "Seamlessly deploy local compose files to a remote agent",
+	Use:   "apply [file]",
+	Short: "Seamlessly deploy local compose files to a remote agent",
 	Long: `Seamlessly deploy local compose files to a remote agent with intelligent defaults.
 Supports standard Docker Compose syntax including trailing commands like 'up -d'.
 
@@ -31,7 +31,7 @@ Examples:
 
 func (c *CLI) runApply(cmd *cobra.Command, args []string) error {
 	filePath := args[0]
-	
+
 	// 1. Resolve agent
 	agentID, err := c.resolveAgent(cmd)
 	if err != nil {
@@ -40,7 +40,7 @@ func (c *CLI) runApply(cmd *cobra.Command, args []string) error {
 
 	// 2. Resolve stack name
 	stackName := deriveStackName(filePath)
-	
+
 	// 3. Read file
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -109,10 +109,10 @@ func deriveStackName(path string) string {
 
 	fileName := filepath.Base(absPath)
 	lowerName := strings.ToLower(fileName)
-	
+
 	// Check if it's a generic compose filename
-	if lowerName == "docker-compose.yaml" || lowerName == "docker-compose.yml" || 
-	   lowerName == "compose.yaml" || lowerName == "compose.yml" {
+	if lowerName == "docker-compose.yaml" || lowerName == "docker-compose.yml" ||
+		lowerName == "compose.yaml" || lowerName == "compose.yml" {
 		// Use parent directory name
 		return filepath.Base(filepath.Dir(absPath))
 	}
@@ -120,10 +120,10 @@ func deriveStackName(path string) string {
 	// Otherwise use filename without extension
 	ext := filepath.Ext(fileName)
 	name := strings.TrimSuffix(fileName, ext)
-	
+
 	// Clean up common suffixes like .compose or .docker
 	name = strings.TrimSuffix(name, ".compose")
 	name = strings.TrimSuffix(name, ".docker")
-	
+
 	return name
 }

@@ -6,10 +6,15 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	v1 "github.com/bhangun/mandau/api/v1"
 	"github.com/bhangun/mandau/pkg/config"
@@ -27,11 +32,19 @@ var (
 		Short:   "Mandau infrastructure control CLI",
 		Version: version, // Add version flag
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// setup logging based on flags/env then connect
+			if err := setupLogging(cmd); err != nil {
+				fmt.Printf("Warning: failed to initialize logger: %v\n", err)
+			}
 			return cli.connect(cmd)
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 			if cli.conn != nil {
-				return cli.conn.Close()
+				_ = cli.conn.Close()
+			}
+			// Close rotating writer if open
+			if RotWriter != nil {
+				_ = RotWriter.Close()
 			}
 			return nil
 		},
@@ -46,7 +59,44 @@ var (
 		Use:   "stack",
 		Short: "Stack management",
 	}
+
+	AppLog    *log.Logger
+	RotWriter *rotatingWriter
+	LogLevel  int
 )
+
+const (
+	LevelDebug = iota
+	LevelInfo
+	LevelWarn
+	LevelError
+)
+
+func parseLogLevel(s string) int {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case "debug":
+		return LevelDebug
+	case "warn", "warning":
+		return LevelWarn
+	case "error":
+		return LevelError
+	default:
+		return LevelInfo
+	}
+}
+
+func Log(levelStr, format string, v ...interface{}) {
+	if AppLog == nil {
+		return
+	}
+	lvl := parseLogLevel(levelStr)
+	if lvl < LogLevel {
+		return
+	}
+	prefix := strings.ToUpper(levelStr)
+	AppLog.Printf("[%s] %s", prefix, fmt.Sprintf(format, v...))
+}
 
 type CLI struct {
 	coreClient  v1.CoreServiceClient
@@ -55,14 +105,255 @@ type CLI struct {
 	config      *config.CoreConfig // For CLI, we can reuse the core config structure
 }
 
-func main() {
+// rotatingWriter handles log rotation by size and/or daily.
+type rotatingWriter struct {
+	path        string
+	mu          sync.Mutex
+	file        *os.File
+	mode        string // "daily", "size", "both", "none"
+	maxSize     int64  // bytes
+	currentDate string
+}
 
+func newRotatingWriter(path, mode string, maxSize int64) (*rotatingWriter, error) {
+	rw := &rotatingWriter{path: path, mode: mode, maxSize: maxSize}
+	if err := rw.openNew(); err != nil {
+		return nil, err
+	}
+	return rw, nil
+}
+
+func (rw *rotatingWriter) openNew() error {
+	f, err := os.OpenFile(rw.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	rw.file = f
+	rw.currentDate = time.Now().Format("2006-01-02")
+	return nil
+}
+
+func (rw *rotatingWriter) shouldRotate(n int) bool {
+	if rw.mode == "none" {
+		return false
+	}
+	now := time.Now()
+	if rw.mode == "daily" || rw.mode == "both" {
+		if rw.currentDate != now.Format("2006-01-02") {
+			return true
+		}
+	}
+	if rw.mode == "size" || rw.mode == "both" {
+		if rw.file != nil {
+			if fi, err := rw.file.Stat(); err == nil {
+				if fi.Size()+int64(n) > rw.maxSize {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (rw *rotatingWriter) rotate() error {
+	// close current
+	if rw.file != nil {
+		_ = rw.file.Sync()
+		_ = rw.file.Close()
+		// rename
+		ts := time.Now().Format("20060102-150405")
+		newName := fmt.Sprintf("%s.%s", rw.path, ts)
+		_ = os.Rename(rw.path, newName)
+	}
+	// open new
+	return rw.openNew()
+}
+
+func (rw *rotatingWriter) Write(p []byte) (int, error) {
+	rw.mu.Lock()
+	defer rw.mu.Unlock()
+	if rw.shouldRotate(len(p)) {
+		if err := rw.rotate(); err != nil {
+			// continue writing even if rotate fails
+			fmt.Fprintf(os.Stderr, "rotate failed: %v\n", err)
+		}
+	}
+	return rw.file.Write(p)
+}
+
+func (rw *rotatingWriter) Close() error {
+	rw.mu.Lock()
+	defer rw.mu.Unlock()
+	if rw.file != nil {
+		_ = rw.file.Sync()
+		err := rw.file.Close()
+		rw.file = nil
+		return err
+	}
+	return nil
+}
+
+func initAppLogger(mode string, sizeMB int64, retentionDays int, retainCount int) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	logsDir := filepath.Join(home, ".mandau", "logs")
+	if err := os.MkdirAll(logsDir, 0o755); err != nil {
+		return err
+	}
+	logPath := filepath.Join(logsDir, "mandau.log")
+
+	mode = strings.ToLower(mode)
+	if mode == "" {
+		mode = "daily"
+	}
+	maxSize := sizeMB * 1024 * 1024
+
+	rw, err := newRotatingWriter(logPath, mode, maxSize)
+	if err != nil {
+		// fallback to simple file
+		f, ferr := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if ferr != nil {
+			return ferr
+		}
+		AppLog = log.New(io.MultiWriter(os.Stdout, f), "mandau: ", log.LstdFlags|log.Lmicroseconds)
+		AppLog.Printf("Application log started (rotation disabled, fallback)")
+		return nil
+	}
+	RotWriter = rw
+	AppLog = log.New(io.MultiWriter(os.Stdout, RotWriter), "mandau: ", log.LstdFlags|log.Lmicroseconds)
+	AppLog.Printf("Application log started (rotate=%s sizeMB=%d)", mode, sizeMB)
+
+	// Prune old logs according to retention settings
+	if retentionDays > 0 || retainCount > 0 {
+		pruneOldLogs(logPath, retentionDays, retainCount)
+	}
+	return nil
+}
+
+func pruneOldLogs(logPath string, retentionDays int, retainCount int) {
+	dir := filepath.Dir(logPath)
+	base := filepath.Base(logPath)
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		if AppLog != nil {
+			AppLog.Printf("pruneOldLogs: read dir failed: %v", err)
+		}
+		return
+	}
+	var matches []os.DirEntry
+	for _, f := range files {
+		if f.Name() == base || strings.HasPrefix(f.Name(), base+".") {
+			matches = append(matches, f)
+		}
+	}
+	// sort by mod time descending
+	type fi struct {
+		name string
+		mod  time.Time
+	}
+	var arr []fi
+	for _, m := range matches {
+		st, err := os.Stat(filepath.Join(dir, m.Name()))
+		if err != nil {
+			continue
+		}
+		arr = append(arr, fi{name: m.Name(), mod: st.ModTime()})
+	}
+	sort.Slice(arr, func(i, j int) bool { return arr[i].mod.After(arr[j].mod) })
+
+	// delete older than retentionDays
+	if retentionDays > 0 {
+		cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+		for _, it := range arr {
+			if it.mod.Before(cutoff) {
+				p := filepath.Join(dir, it.name)
+				_ = os.Remove(p)
+				if AppLog != nil {
+					AppLog.Printf("pruneOldLogs: removed old log %s", p)
+				}
+			}
+		}
+	}
+	// keep only retainCount most recent
+	if retainCount > 0 && len(arr) > retainCount {
+		for i := retainCount; i < len(arr); i++ {
+			p := filepath.Join(dir, arr[i].name)
+			_ = os.Remove(p)
+			if AppLog != nil {
+				AppLog.Printf("pruneOldLogs: removed excess log %s", p)
+			}
+		}
+	}
+}
+
+func setupLogging(cmd *cobra.Command) error {
+	// Flags take precedence over env
+	mode, _ := cmd.Flags().GetString("log-rotate-mode")
+	if mode == "" {
+		mode = os.Getenv("MANDAU_LOG_ROTATE_MODE")
+	}
+	if mode == "" {
+		mode = "daily"
+	}
+
+	sizeMBFlag, _ := cmd.Flags().GetInt("log-rotate-size-mb")
+	var sizeMB int64
+	if sizeMBFlag > 0 {
+		sizeMB = int64(sizeMBFlag)
+	} else if s := os.Getenv("MANDAU_LOG_ROTATE_SIZE_MB"); s != "" {
+		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
+			sizeMB = v
+		}
+	}
+	if sizeMB == 0 {
+		sizeMB = 10
+	}
+
+	retentionDays, _ := cmd.Flags().GetInt("log-retention-days")
+	if retentionDays == 0 {
+		if s := os.Getenv("MANDAU_LOG_RETENTION_DAYS"); s != "" {
+			if v, err := strconv.Atoi(s); err == nil {
+				retentionDays = v
+			}
+		}
+	}
+	retainCount, _ := cmd.Flags().GetInt("log-retain-count")
+	if retainCount == 0 {
+		if s := os.Getenv("MANDAU_LOG_RETAIN_COUNT"); s != "" {
+			if v, err := strconv.Atoi(s); err == nil {
+				retainCount = v
+			}
+		}
+	}
+
+	// determine log level
+	lvl, _ := cmd.Flags().GetString("log-level")
+	if lvl == "" {
+		lvl = os.Getenv("MANDAU_LOG_LEVEL")
+	}
+	if lvl == "" {
+		lvl = "info"
+	}
+	LogLevel = parseLogLevel(lvl)
+
+	return initAppLogger(mode, sizeMB, retentionDays, retainCount)
+}
+
+func main() {
 	// Global flags
 	rootCmd.PersistentFlags().String("server", "localhost:3443", "Core server address")
 	rootCmd.PersistentFlags().String("cert", "", "Client certificate")
 	rootCmd.PersistentFlags().String("key", "", "Client key")
 	rootCmd.PersistentFlags().String("ca", "", "CA certificate")
 	rootCmd.PersistentFlags().StringP("agent", "a", "", "Target agent ID")
+	// Logging flags
+	rootCmd.PersistentFlags().String("log-rotate-mode", "", "Log rotation mode: daily, size, both, none (env MANDAU_LOG_ROTATE_MODE)")
+	rootCmd.PersistentFlags().Int("log-rotate-size-mb", 0, "Rotation size in MB (env MANDAU_LOG_ROTATE_SIZE_MB)")
+	rootCmd.PersistentFlags().Int("log-retention-days", 0, "Prune logs older than N days (env MANDAU_LOG_RETENTION_DAYS)")
+	rootCmd.PersistentFlags().Int("log-retain-count", 0, "Keep at most N rotated log files (env MANDAU_LOG_RETAIN_COUNT)")
+	rootCmd.PersistentFlags().String("log-level", "", "Log level: DEBUG, INFO, WARN, ERROR (env MANDAU_LOG_LEVEL)")
 
 	// Agent commands
 
@@ -295,7 +586,7 @@ func (c *CLI) connect(cmd *cobra.Command) error {
 
 	creds := credentials.NewTLS(tlsConfig)
 
-	conn, err := grpc.Dial(serverAddr, 
+	conn, err := grpc.Dial(serverAddr,
 		grpc.WithTransportCredentials(creds),
 	)
 	if err != nil {
@@ -573,13 +864,13 @@ func (c *CLI) resolveAgent(cmd *cobra.Command) (string, error) {
 	if err == nil && len(resp.Agents) > 0 {
 		firstAgent := resp.Agents[0].Id
 		fmt.Printf("ℹ No agent specified, using first available: %s\n", firstAgent)
-		
+
 		// Auto-save as default
 		c.config.DefaultAgent = firstAgent
 		homeDir, _ := os.UserHomeDir()
 		configPath := filepath.Join(homeDir, ".mandau", "config.yaml")
 		_ = config.SaveCoreConfig(configPath, c.config)
-		
+
 		return firstAgent, nil
 	}
 

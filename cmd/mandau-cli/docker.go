@@ -39,7 +39,7 @@ func init() {
 		Short: "List containers",
 		RunE:  listContainers,
 	})
-	
+
 	// Add other common ones for help/visibility, but they will all use the generic wrapper
 	// if not explicitly overridden.
 }

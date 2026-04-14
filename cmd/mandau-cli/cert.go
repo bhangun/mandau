@@ -17,16 +17,16 @@ import (
 )
 
 var (
-	certDir        string
-	caDir          string
-	coreHostname   string
-	coreIP         string
-	agentHostname  string
-	agentIP        string
-	caDays         int
-	certDays        int
-	keySize        int
-	profile        string
+	certDir       string
+	caDir         string
+	coreHostname  string
+	coreIP        string
+	agentHostname string
+	agentIP       string
+	caDays        int
+	certDays      int
+	keySize       int
+	profile       string
 )
 
 func init() {
