@@ -11,9 +11,36 @@ import (
 )
 
 var dockerCmd = &cobra.Command{
-	Use:                "docker",
-	Short:              "Docker command wrapper",
-	Long:               "Run Docker commands on a remote agent. Use 'mandau docker ps' or 'mandau docker images'.",
+	Use:   "docker",
+	Short: "Docker command wrapper",
+	Long: `Run Docker commands on a remote agent. Use 'mandau docker ps' or 'mandau docker images'.
+
+Available subcommands:
+  ps, list      List containers
+  images        List images
+  stop          Stop one or more containers
+  start         Start one or more containers
+  restart       Restart one or more containers
+  pause         Pause one or more containers
+  unpause       Unpause one or more containers
+  rm            Remove one or more containers
+  kill          Kill one or more running containers
+  logs          Fetch logs of a container
+  inspect       Display detailed information on one or more containers/images
+  exec          Execute a command in a running container
+  stats         Display a live stream of container resource usage statistics
+  version       Show Docker version information
+  info          Display system-wide information
+  network       Manage Docker networks
+  volume        Manage Docker volumes
+
+Examples:
+  mandau docker ps
+  mandau docker images
+  mandau docker stop container1 container2
+  mandau docker start container1
+  mandau docker logs -f container1
+  mandau docker exec -it container1 /bin/bash`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
@@ -27,21 +54,451 @@ var dockerCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(dockerCmd)
 
-	// Specific subcommands that we might want to handle differently or keep from previous version
+	// List containers
 	dockerCmd.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "List containers (alias for ps)",
-		RunE:  listContainers,
+		Use:     "ps",
+		Aliases: []string{"list"},
+		Short:   "List containers",
+		RunE:    listContainers,
 	})
 
+	// Stop containers
 	dockerCmd.AddCommand(&cobra.Command{
-		Use:   "ps",
-		Short: "List containers",
-		RunE:  listContainers,
+		Use:   "stop [CONTAINER...]",
+		Short: "Stop one or more running containers",
+		Long: `Stop one or more running containers on the remote agent.
+
+Examples:
+  mandau docker stop mycontainer
+  mandau docker stop container1 container2
+  mandau docker stop -t 30 mycontainer`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"stop"}, args...))
+		},
 	})
 
-	// Add other common ones for help/visibility, but they will all use the generic wrapper
-	// if not explicitly overridden.
+	// Start containers
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "start [CONTAINER...]",
+		Short: "Start one or more stopped containers",
+		Long: `Start one or more stopped containers on the remote agent.
+
+Examples:
+  mandau docker start mycontainer
+  mandau docker start container1 container2`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"start"}, args...))
+		},
+	})
+
+	// Restart containers
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "restart [CONTAINER...]",
+		Short: "Restart one or more containers",
+		Long: `Restart one or more containers on the remote agent.
+
+Examples:
+  mandau docker restart mycontainer
+  mandau docker restart container1 container2
+  mandau docker restart -t 10 mycontainer`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"restart"}, args...))
+		},
+	})
+
+	// Pause containers
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "pause [CONTAINER...]",
+		Short: "Pause all processes within one or more containers",
+		Long: `Pause all processes within one or more containers on the remote agent.
+
+Examples:
+  mandau docker pause mycontainer
+  mandau docker pause container1 container2`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"pause"}, args...))
+		},
+	})
+
+	// Unpause containers
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "unpause [CONTAINER...]",
+		Short: "Unpause all processes within one or more containers",
+		Long: `Unpause all processes within one or more containers on the remote agent.
+
+Examples:
+  mandau docker unpause mycontainer
+  mandau docker unpause container1 container2`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"unpause"}, args...))
+		},
+	})
+
+	// Remove containers
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "rm [CONTAINER...]",
+		Short: "Remove one or more containers",
+		Long: `Remove one or more containers from the remote agent.
+
+Examples:
+  mandau docker rm mycontainer
+  mandau docker rm container1 container2
+  mandau docker rm -f mycontainer
+  mandau docker rm -v mycontainer`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"rm"}, args...))
+		},
+	})
+
+	// Kill containers
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "kill [CONTAINER...]",
+		Short: "Kill one or more running containers",
+		Long: `Kill one or more running containers on the remote agent.
+
+Examples:
+  mandau docker kill mycontainer
+  mandau docker kill container1 container2
+  mandau docker kill --signal=SIGTERM mycontainer`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"kill"}, args...))
+		},
+	})
+
+	// Logs
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "logs [CONTAINER]",
+		Short: "Fetch the logs of a container",
+		Long: `Fetch the logs of a container from the remote agent.
+
+Examples:
+  mandau docker logs mycontainer
+  mandau docker logs -f mycontainer
+  mandau docker logs --tail 100 mycontainer
+  mandau docker logs --since 2024-01-01 mycontainer`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"logs"}, args...))
+		},
+	})
+
+	// Inspect
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "inspect [CONTAINER|IMAGE|NETWORK|VOLUME...]",
+		Short: "Return low-level information on Docker objects",
+		Long: `Display detailed information on one or more containers, images, networks, or volumes.
+
+Examples:
+  mandau docker inspect mycontainer
+  mandau docker inspect myimage
+  mandau docker inspect --format='{{.State.Status}}' mycontainer`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"inspect"}, args...))
+		},
+	})
+
+	// Exec
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "exec [CONTAINER] [COMMAND]",
+		Short: "Run a command in a running container",
+		Long: `Execute a command in a running container on the remote agent.
+
+Examples:
+  mandau docker exec mycontainer ls
+  mandau docker exec -it mycontainer /bin/bash
+  mandau docker exec -e VAR=value mycontainer env`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"exec"}, args...))
+		},
+	})
+
+	// Stats
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "stats [CONTAINER...]",
+		Short: "Display a live stream of container(s) resource usage statistics",
+		Long: `Display a live stream of container(s) resource usage statistics.
+
+Examples:
+  mandau docker stats
+  mandau docker stats mycontainer
+  mandau docker stats --no-stream`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.executeDockerCommand(cmd, append([]string{"stats"}, args...))
+		},
+	})
+
+	// Images
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "images",
+		Short: "List images",
+		Long: `List Docker images on the remote agent.
+
+Examples:
+  mandau docker images
+  mandau docker images -a
+  mandau docker images --filter "dangling=true"`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.executeDockerCommand(cmd, append([]string{"images"}, args...))
+		},
+	})
+
+	// Version
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Show the Docker version information",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.executeDockerCommand(cmd, []string{"version"})
+		},
+	})
+
+	// Info
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "info",
+		Short: "Display system-wide information",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.executeDockerCommand(cmd, []string{"info"})
+		},
+	})
+
+	// Network management
+	networkCmd := &cobra.Command{
+		Use:   "network",
+		Short: "Manage Docker networks",
+		Long: `Manage Docker networks on the remote agent.
+
+Examples:
+  mandau docker network ls
+  mandau docker network create mynetwork
+  mandau docker network inspect mynetwork
+  mandau docker network rm mynetwork`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"network"}, args...))
+		},
+	}
+	networkCmd.AddCommand(&cobra.Command{
+		Use:     "ls",
+		Aliases: []string{"list"},
+		Short:   "List networks",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.executeDockerCommand(cmd, append([]string{"network", "ls"}, args...))
+		},
+	})
+	networkCmd.AddCommand(&cobra.Command{
+		Use:   "create [NETWORK]",
+		Short: "Create a network",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"network", "create"}, args...))
+		},
+	})
+	networkCmd.AddCommand(&cobra.Command{
+		Use:   "inspect [NETWORK...]",
+		Short: "Display detailed information on one or more networks",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"network", "inspect"}, args...))
+		},
+	})
+	networkCmd.AddCommand(&cobra.Command{
+		Use:   "rm [NETWORK...]",
+		Short: "Remove one or more networks",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"network", "rm"}, args...))
+		},
+	})
+	dockerCmd.AddCommand(networkCmd)
+
+	// Volume management
+	volumeCmd := &cobra.Command{
+		Use:   "volume",
+		Short: "Manage Docker volumes",
+		Long: `Manage Docker volumes on the remote agent.
+
+Examples:
+  mandau docker volume ls
+  mandau docker volume create myvolume
+  mandau docker volume inspect myvolume
+  mandau docker volume rm myvolume`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"volume"}, args...))
+		},
+	}
+	volumeCmd.AddCommand(&cobra.Command{
+		Use:     "ls",
+		Aliases: []string{"list"},
+		Short:   "List volumes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.executeDockerCommand(cmd, append([]string{"volume", "ls"}, args...))
+		},
+	})
+	volumeCmd.AddCommand(&cobra.Command{
+		Use:   "create [VOLUME]",
+		Short: "Create a volume",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"volume", "create"}, args...))
+		},
+	})
+	volumeCmd.AddCommand(&cobra.Command{
+		Use:   "inspect [VOLUME...]",
+		Short: "Display detailed information on one or more volumes",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"volume", "inspect"}, args...))
+		},
+	})
+	volumeCmd.AddCommand(&cobra.Command{
+		Use:   "rm [VOLUME...]",
+		Short: "Remove one or more volumes",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"volume", "rm"}, args...))
+		},
+	})
+	dockerCmd.AddCommand(volumeCmd)
+
+	// Pull image
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "pull [IMAGE]",
+		Short: "Pull an image or a repository from a registry",
+		Long: `Pull an image or repository from a registry.
+
+Examples:
+  mandau docker pull nginx
+  mandau docker pull nginx:latest
+  mandau docker pull myregistry.com/myimage:v1.0`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"pull"}, args...))
+		},
+	})
+
+	// Push image
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "push [IMAGE]",
+		Short: "Push an image or a repository to a registry",
+		Long: `Push an image or repository to a registry.
+
+Examples:
+  mandau docker push myimage
+  mandau docker push myregistry.com/myimage:v1.0`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"push"}, args...))
+		},
+	})
+
+	// Build image
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "build [PATH]",
+		Short: "Build an image from a Dockerfile",
+		Long: `Build an image from a Dockerfile.
+
+Examples:
+  mandau docker build .
+  mandau docker build -t myimage:v1.0 .
+  mandau docker build -f Dockerfile.prod .`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"build"}, args...))
+		},
+	})
+
+	// Prune
+	dockerCmd.AddCommand(&cobra.Command{
+		Use:   "prune",
+		Short: "Remove unused data (containers, images, networks, volumes)",
+		Long: `Remove unused Docker data.
+
+Examples:
+  mandau docker system prune
+  mandau docker container prune
+  mandau docker image prune`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return cli.executeDockerCommand(cmd, append([]string{"prune"}, args...))
+		},
+	})
 }
 
 func (c *CLI) executeDockerCommand(cmd *cobra.Command, args []string) error {

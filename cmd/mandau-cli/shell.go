@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	v1 "github.com/bhangun/mandau/api/v1"
 	"github.com/spf13/cobra"
@@ -16,9 +19,17 @@ var shellCmd = &cobra.Command{
 	Short: "Open an interactive host shell on a remote agent",
 	Long: `Opens an interactive secure shell directly on the agent's underlying operating system.
 This requires the agent to have 'enable_host_shell' configured securely.
-	
-Example:
-  mandau shell agent-001`,
+
+Terminal Features:
+  • Automatic terminal resize handling
+  • Full TTY support
+  • Color output preserved
+  • Ctrl+C handling
+
+Examples:
+  mandau shell
+  mandau shell agent-001
+  mandau shell  # auto-selects first available agent`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Use provided agent ID or interactive selection
 		var agentID string
@@ -32,6 +43,9 @@ Example:
 			agentID = id
 		}
 
+		// Show connection message BEFORE entering raw mode
+		fmt.Printf("🔌 Connecting to agent '%s'...\n", agentID)
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -40,32 +54,59 @@ Example:
 			return fmt.Errorf("failed to connect shell stream: %w", err)
 		}
 
-		// Initial connection request
+		// Get initial terminal size before going raw
+		fd := int(os.Stdin.Fd())
+		width, height, _ := term.GetSize(fd)
+
+		// Initial connection request with terminal size
 		err = stream.Send(&v1.HostShellRequest{
-			AgentId: agentID,
+			AgentId:    agentID,
+			TermWidth:  int32(width),
+			TermHeight: int32(height),
 		})
 		if err != nil {
 			return fmt.Errorf("failed to initialize shell: %w", err)
 		}
 
 		// Put local terminal in raw mode
-		fd := int(os.Stdin.Fd())
 		oldState, err := term.MakeRaw(fd)
 		if err != nil {
 			return fmt.Errorf("failed to set raw terminal mode: %w", err)
 		}
-		defer term.Restore(fd, oldState)
 
-		// Get terminal size
-		width, height, err := term.GetSize(fd)
-		if err == nil {
-			stream.Send(&v1.HostShellRequest{
-				TermWidth:  int32(width),
-				TermHeight: int32(height),
-			})
-		}
+		// Ensure terminal is restored on exit
+		restored := false
+		defer func() {
+			if !restored {
+				term.Restore(fd, oldState)
+			}
+		}()
 
-		errChan := make(chan error, 1)
+		// Send a newline to trigger the shell prompt
+		time.Sleep(100 * time.Millisecond)
+		stream.Send(&v1.HostShellRequest{
+			Data: []byte("\n"),
+		})
+
+		// Set up terminal resize handling
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGWINCH)
+		defer signal.Stop(sigChan)
+
+		// Send resize events
+		go func() {
+			for range sigChan {
+				w, h, err := term.GetSize(fd)
+				if err == nil {
+					stream.Send(&v1.HostShellRequest{
+						TermWidth:  int32(w),
+						TermHeight: int32(h),
+					})
+				}
+			}
+		}()
+
+		errChan := make(chan error, 2)
 
 		// Read from remote and write to local stdout
 		go func() {
@@ -85,6 +126,7 @@ Example:
 				}
 				if len(resp.Data) > 0 {
 					os.Stdout.Write(resp.Data)
+					os.Stdout.Sync()
 				}
 			}
 		}()
@@ -103,7 +145,6 @@ Example:
 					}
 				}
 				if err != nil {
-					// Don't send error to channel if it's just a closure
 					if err != io.EOF {
 						errChan <- err
 					}
@@ -114,12 +155,17 @@ Example:
 		}()
 
 		// Wait for completion
-		if err := <-errChan; err != nil && err != io.EOF {
-			// Restore term before printing error
-			term.Restore(fd, oldState)
-			return err
+		err = <-errChan
+		if err != nil && err != io.EOF {
+			fmt.Fprintf(os.Stderr, "\nShell disconnected: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "\nShell session ended.\n")
 		}
 
-		return nil
+		// Restore terminal before exiting
+		term.Restore(fd, oldState)
+		restored = true
+
+		return err
 	},
 }

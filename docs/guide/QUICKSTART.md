@@ -263,6 +263,53 @@ mandau stack logs agent-001 mystack
 mandau container exec agent-001 mystack-web-1 /bin/sh
 ```
 
+### Docker Commands (Remote Agent)
+
+```bash
+# List containers
+mandau docker ps
+mandau docker list
+
+# Container lifecycle
+mandau docker stop container1
+mandau docker start container1
+mandau docker restart container1
+
+# Logs and inspection
+mandau docker logs -f container1
+mandau docker inspect container1
+
+# Execute commands
+mandau docker exec -it container1 /bin/bash
+
+# Image management
+mandau docker images
+mandau docker pull nginx
+mandau docker build -t myimage:v1.0 .
+```
+
+### System Monitoring
+
+```bash
+# Quick checks
+mandau ps              # Process list
+mandau df              # Disk usage
+mandau free            # Memory usage
+mandau uptime          # System uptime
+
+# Comprehensive monitoring
+mandau system info     # Full system overview
+mandau system ps aux
+mandau system df -h
+mandau system netstat -tulpn
+mandau system who      # Logged-in users
+mandau system last     # Recent logins
+
+# Interactive tools
+mandau system top
+mandau system htop
+```
+
 ### Container Management
 
 ```bash
@@ -305,24 +352,66 @@ mandau shell
 mandau shell agent-insanserver
 ```
 
+**Features:**
+- ✅ Automatic terminal resize handling (SIGWINCH)
+- ✅ Full TTY support
+- ✅ Color output preserved
+- ✅ Ctrl+C handling
+
 Once connected, you have a full bash session. Use `exit` or `Ctrl+D` to disconnect.
 
 > **Security Note:** Host shell access can be disabled per-agent by setting `disable_host_shell: true` in the agent's `security` config section.
 
+### Quick System Checks
+
+For fast system checks without full shell:
+
+```bash
+# Process list
+mandau ps
+mandau ps aux
+
+# Disk usage
+mandau df
+mandau df -hi
+
+# Memory
+mandau free
+mandau free -m
+
+# Uptime
+mandau uptime
+```
+
 ### Stack Deployment
 
 ```bash
-# Deploy a compose file (defaults to 'up -d')
-mandau apply my-stack.yaml
+# Quick deploy (recommended)
+mandau apply my-stack.yaml              # Defaults to 'up'
+mandau apply my-stack.yaml up -d        # Explicit daemon mode
 
-# Deploy with explicit daemon mode
-mandau apply my-stack.yaml up -d
+# Stack lifecycle
+mandau apply my-stack.yaml down         # Stop and remove
+mandau apply my-stack.yaml stop         # Stop without removing
+mandau apply my-stack.yaml start        # Start stopped stack
+mandau apply my-stack.yaml restart      # Restart containers
 
-# Bring a stack down
-mandau apply my-stack.yaml down
+# Stack inspection
+mandau apply my-stack.yaml ps           # List containers
+mandau apply my-stack.yaml logs -f      # Stream logs
+mandau apply my-stack.yaml inspect      # Detailed info
 
-# Deploy to a specific agent
+# Image operations
+mandau apply my-stack.yaml pull         # Pull images only
+mandau apply my-stack.yaml build        # Build images
+
+# Deploy to specific agent
 mandau -a agent-002 apply my-stack.yaml
+
+# Explicit stack commands (old way)
+mandau stack apply agent-001 mystack mystack.yaml
+mandau stack up agent-001 mystack ./docker-compose.yaml
+mandau stack down agent-001 mystack ./docker-compose.yaml
 ```
 
 The `.env` file adjacent to your compose file is automatically uploaded to the agent.

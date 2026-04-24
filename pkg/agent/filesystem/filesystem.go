@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	v1 "github.com/bhangun/mandau/api/v1"
+	"github.com/bhangun/mandau/pkg/utils"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -25,6 +26,9 @@ func NewManager(stackRoot string) *Manager {
 
 // resolvePath resolves a path relative to a stack or as an absolute path
 func (m *Manager) resolvePath(stackName, path string) (string, error) {
+	// Expand tilde if present
+	path = utils.ExpandPath(path)
+
 	if stackName == "" {
 		// Treat as absolute path
 		return path, nil
@@ -108,10 +112,16 @@ func (m *Manager) WriteFile(ctx context.Context, stackName, path string, content
 		return err
 	}
 
+	// Check if path is a directory
+	info, err := os.Stat(resolvedPath)
+	if err == nil && info.IsDir() {
+		return fmt.Errorf("cannot write to directory: %s (did you forget to append a filename?)", path)
+	}
+
 	// Ensure directory exists
 	dir := filepath.Dir(resolvedPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
+		return fmt.Errorf("create directory: %w", err)
 	}
 
 	if mode == 0 {
@@ -149,7 +159,7 @@ func (m *Manager) MoveFile(ctx context.Context, stackName, src, dest string) err
 	// Ensure destination directory exists
 	destDir := filepath.Dir(resolvedDest)
 	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return err
+		return fmt.Errorf("create destination directory: %w", err)
 	}
 
 	return os.Rename(resolvedSrc, resolvedDest)
@@ -167,8 +177,49 @@ func (m *Manager) CopyFile(ctx context.Context, stackName, src, dest string) err
 		return err
 	}
 
-	// Simplified copy implementation (for files only)
+	srcInfo, err := os.Stat(resolvedSrc)
+	if err != nil {
+		return err
+	}
+
+	if srcInfo.IsDir() {
+		return m.copyDir(resolvedSrc, resolvedDest)
+	}
+
 	return copyFile(resolvedSrc, resolvedDest)
+}
+
+func (m *Manager) copyDir(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			if err := m.copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			if err := copyFile(srcPath, dstPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func copyFile(src, dst string) error {

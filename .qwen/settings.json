@@ -9,7 +9,10 @@
       "Bash(git tag *)",
       "Bash(ssh *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(./mandau-test *)",
+      "Bash(rm *)",
+      "Bash(timeout *)"
     ]
   },
   "$version": 3

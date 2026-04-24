@@ -1122,6 +1122,9 @@ func (c *Core) HostShell(stream agentv1.CoreService_HostShellServer) error {
 	// First message contains agent ID
 	req, err := stream.Recv()
 	if err != nil {
+		if err == io.EOF {
+			return nil
+		}
 		return err
 	}
 
@@ -1142,34 +1145,38 @@ func (c *Core) HostShell(stream agentv1.CoreService_HostShellServer) error {
 		return err
 	}
 
-	errChan := make(chan error, 1)
+	errChan := make(chan error, 2) // Buffer for 2 goroutines
 
 	// Forward client -> agent
 	go func() {
 		for {
-			req, err := stream.Recv()
-			if err != nil {
-				errChan <- err
+			req, recvErr := stream.Recv()
+			if recvErr != nil {
+				errChan <- recvErr
 				return
 			}
-			if err := agentStream.Send(req); err != nil {
-				errChan <- err
+			if sendErr := agentStream.Send(req); sendErr != nil {
+				errChan <- sendErr
 				return
 			}
 		}
 	}()
 
 	// Forward agent -> client
-	for {
-		resp, err := agentStream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				return nil
+	go func() {
+		for {
+			resp, recvErr := agentStream.Recv()
+			if recvErr != nil {
+				errChan <- recvErr
+				return
 			}
-			return err
+			if sendErr := stream.Send(resp); sendErr != nil {
+				errChan <- sendErr
+				return
+			}
 		}
-		if err := stream.Send(resp); err != nil {
-			return err
-		}
-	}
+	}()
+
+	// Wait for either goroutine to finish
+	return <-errChan
 }

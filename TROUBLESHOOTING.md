@@ -6,6 +6,53 @@ scp <USER>@<IP_ADDRESS>:~/.mandau/certs/{ca.crt,client.crt,client.key} ~/.mandau
 
 
 
+## Secure Environment Variables
+
+### Setting up secure environment variables
+
+1. **Set a variable manually:**
+```bash
+mandau env set DB_PASSWORD=secret123
+```
+
+2. **Import from a .env file:**
+```bash
+mandau env import prod.env
+```
+
+3. **List stored variables:**
+```bash
+mandau env list
+```
+
+### Using env vars with apply
+
+Include specific variables from the secure store:
+```bash
+mandau apply docker-compose.yaml --env DB_PASSWORD,API_KEY
+```
+
+Include additional .env files:
+```bash
+mandau apply docker-compose.yaml --env-file prod.env
+```
+
+Combine both:
+```bash
+mandau apply docker-compose.yaml --env DB_PASSWORD --env-file prod.env
+```
+
+### Troubleshooting env issues
+
+If variables are not being passed:
+1. Check stored variables: `mandau env list`
+2. Verify the keys match exactly (case-sensitive)
+3. Ensure the store is initialized (may need MANDAU_ENV_MASTER_PASSWORD set)
+
+
+
+
+
 ## When the agent is not registering itself
 Run these commands on your remote server (<REMOTE_SERVER_HOST>):
 

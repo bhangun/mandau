@@ -156,11 +156,51 @@ func (c *CLI) deployContainer(cmd *cobra.Command, args []string) error {
 			}
 		}
 		if transferErr != nil {
-			return fmt.Errorf("image transfer failed after %d attempt(s): %w", retries+1, transferErr)
-		}
-		fmt.Println("✓ Image transferred successfully\n")
-		if AppLog != nil {
-			AppLog.Printf("Image streamed successfully: %s", localImage)
+			fmt.Printf("⚠️ Streaming failed after %d attempts: %v\n", retries+1, transferErr)
+			if AppLog != nil {
+				AppLog.Printf("Streaming failed, falling back to file upload: %v", transferErr)
+			}
+
+			// Fallback: save image to temp file and upload
+			tmpPath, sha, _, err := c.saveImageToTempFile(localImage)
+			if err != nil {
+				return fmt.Errorf("save image to file fallback: %w", err)
+			}
+			defer os.Remove(tmpPath)
+			remotePath := fmt.Sprintf("/tmp/mandau_uploads/%s.tar", sha)
+
+			var transferErr2 error
+			for attempt := 0; attempt <= retries; attempt++ {
+				transferErr2 = c.uploadFileToRemote(ctx, agentID, tmpPath, remotePath, false, progress)
+				if transferErr2 == nil {
+					break
+				}
+				fmt.Printf("⚠️ Fallback transfer attempt %d failed: %v\n", attempt+1, transferErr2)
+				if attempt < retries {
+					backoff := time.Second * time.Duration(1<<attempt)
+					fmt.Printf("Retrying in %s...\n", backoff)
+					time.Sleep(backoff)
+				}
+			}
+			if transferErr2 != nil {
+				return fmt.Errorf("fallback image transfer failed after %d attempt(s): %w", retries+1, transferErr2)
+			}
+
+			// Load image from remote file
+			fmt.Println("📥 Loading image on remote from file...")
+			if err := c.remoteLoadFromFile(ctx, agentID, remotePath); err != nil {
+				return fmt.Errorf("remote load failed after fallback: %w", err)
+			}
+			_ = c.remoteRemoveFile(ctx, agentID, remotePath)
+			fmt.Println("✓ Image transferred and loaded successfully (fallback)\n")
+			if AppLog != nil {
+				AppLog.Printf("Image transferred via fallback file: %s -> %s", localImage, remotePath)
+			}
+		} else {
+			fmt.Println("✓ Image transferred successfully\n")
+			if AppLog != nil {
+				AppLog.Printf("Image streamed successfully: %s", localImage)
+			}
 		}
 	}
 

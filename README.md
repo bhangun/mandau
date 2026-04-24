@@ -157,12 +157,14 @@ Mandau is a secure, operator-grade control plane for managing Docker infrastruct
 
 ### 7. **CLI Tool** (`cmd/mandau-cli/`)
 - Agent management
-- Stack operations
-- Log streaming
+- Stack operations with full lifecycle support (up, down, start, stop, restart, etc.)
+- Docker command wrapper (25+ commands: ps, stop, start, logs, exec, images, build, pull, etc.)
+- System monitoring (ps, df, du, free, uptime, netstat, who, last, top, htop, system info)
 - Container management (exec, list, logs, start, stop)
 - Service management (nginx, systemd, ssl, firewall, dns, cron, environment)
 - Plugin management (auth, secrets, audit)
-- Interactive mode
+- Interactive host shell with full TTY support and auto-resize
+- Filesystem operations (ls, cat, fetch, cp, mkdir, rm)
 
 ### 8. **Deployment Configurations**
 - Docker Compose setup
@@ -536,6 +538,13 @@ mandau docker ps
 mandau docker logs -f my-container
 mandau docker images
 
+# System monitoring
+mandau ps
+mandau df
+mandau free
+mandau uptime
+mandau system info
+
 # Manage services
 mandau services nginx create-proxy agent-001 example.com http://localhost:3000 80
 mandau services systemd start agent-001 myservice
@@ -544,7 +553,55 @@ mandau services firewall allow-port agent-001 80 tcp
 # Manage plugins
 mandau plugins secrets get my-secret
 mandau plugins auth status
+
+# Interactive shell
+mandau shell
 ```
+
+#### Complete CLI Command Reference
+
+**Stack Operations:**
+```bash
+mandau apply docker-compose.yaml           # Deploy (defaults to up)
+mandau apply docker-compose.yaml up -d     # Deploy with flags
+mandau apply docker-compose.yaml down      # Stop and remove
+mandau apply docker-compose.yaml stop      # Stop without removing
+mandau apply docker-compose.yaml start     # Start stopped
+mandau apply docker-compose.yaml restart   # Restart
+mandau apply docker-compose.yaml ps        # List containers
+mandau apply docker-compose.yaml logs -f   # Stream logs
+```
+
+**Docker Commands (25+ supported):**
+```bash
+mandau docker ps                           # List containers
+mandau docker stop/start/restart           # Container lifecycle
+mandau docker logs -f container            # Follow logs
+mandau docker exec -it container bash      # Execute commands
+mandau docker images                       # List images
+mandau docker pull/push                    # Image management
+mandau docker build                        # Build images
+mandau docker network ls/create/inspect/rm # Networks
+mandau docker volume ls/create/inspect/rm  # Volumes
+```
+
+**System Monitoring:**
+```bash
+mandau ps/df/free/uptime                   # Quick checks
+mandau system info                         # Comprehensive overview
+mandau system ps/df/du/free/uptime         # System commands
+mandau system top/htop                     # Interactive tools
+mandau system who/last                     # User activity
+mandau system netstat                      # Network stats
+mandau system logs /var/log/syslog -f      # Log viewing
+```
+
+**Shell Access:**
+```bash
+mandau shell                               # Interactive shell
+```
+
+For complete CLI documentation, see [CLI Reference Guide](docs/guide/CLI_REFERENCE.md).
 
 ```bash
 # Option 2: Using command-line flags
